@@ -70,5 +70,9 @@
     "players3": "3 players",
     "players4": "4 players",
     "roll": "Roll the dice"
+  },
+  "uno": {
+    "draw": "Draw a card",
+    "chooseColor": "Pick a color"
   }
 }

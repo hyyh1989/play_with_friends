@@ -70,5 +70,9 @@
     "players3": "三个人玩",
     "players4": "四个人玩",
     "roll": "掷骰子"
+  },
+  "uno": {
+    "draw": "抽一张牌",
+    "chooseColor": "选一个颜色"
   }
 }

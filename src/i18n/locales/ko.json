@@ -70,5 +70,9 @@
     "players3": "세 명",
     "players4": "네 명",
     "roll": "주사위 굴리기"
+  },
+  "uno": {
+    "draw": "카드 뽑기",
+    "chooseColor": "색을 골라요"
   }
 }
