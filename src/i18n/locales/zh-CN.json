@@ -64,5 +64,11 @@
     "size4": "4 对牌",
     "size6": "6 对牌",
     "size8": "8 对牌"
+  },
+  "snakes": {
+    "players2": "两个人玩",
+    "players3": "三个人玩",
+    "players4": "四个人玩",
+    "roll": "掷骰子"
   }
 }

@@ -64,5 +64,11 @@
     "size4": "4쌍",
     "size6": "6쌍",
     "size8": "8쌍"
+  },
+  "snakes": {
+    "players2": "두 명",
+    "players3": "세 명",
+    "players4": "네 명",
+    "roll": "주사위 굴리기"
   }
 }

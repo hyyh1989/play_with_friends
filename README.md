@@ -19,13 +19,13 @@ an app — fullscreen, offline-capable.
 
 ## Status
 
-**Memory Match is playable.** See [docs/ROADMAP.md](docs/ROADMAP.md).
+**Memory Match and Snakes & Ladders are playable.** See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 | Stage | What | State |
 |---|---|---|
 | 0 | Foundations: PWA shell, game module interface, audio, settings | done |
 | 1 | Memory Match — solo or vs AI, 4/6/8 pairs | built, awaiting the real test (a child) |
-| 2 | Snakes & Ladders | planned |
+| 2 | Snakes & Ladders — 2-4 players, ladders and slides | built, awaiting the real test (a child) |
 | 3 | UNO (full rules, configurable card set) | planned |
 
 "Built" is not "done" here: a stage is finished when a 5-year-old plays it through without

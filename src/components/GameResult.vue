@@ -11,7 +11,11 @@ import type { PlayerRef } from '../core/types'
  */
 const props = defineProps<{
   players: PlayerRef[]
-  scores: Record<string, number>
+  /**
+   * 每人得几颗星。只在"得分=收集了多少个东西"的游戏里传（比如翻牌配对的对数）。
+   * 蛇梯棋这种"位置不是分数"的游戏不要传 —— 传了会把棋盘格号画成几十颗星。
+   */
+  scores?: Record<string, number>
   /** 平局或单人模式时为 null */
   winnerId: string | null
   solo: boolean
@@ -33,9 +37,11 @@ function isWinner(player: PlayerRef): boolean {
     <div class="players">
       <div v-for="player in players" :key="player.id" class="player" :class="{ won: isWinner(player) }">
         <span class="avatar">{{ player.avatar }}</span>
-        <div class="stars">
+        <div v-if="scores" class="stars">
           <span v-for="n in scores[player.id] ?? 0" :key="n" class="star">⭐</span>
         </div>
+        <!-- 没有分数概念的游戏（蛇梯棋）用奖杯表示赢家 -->
+        <span v-else-if="isWinner(player)" class="trophy">🏆</span>
       </div>
     </div>
 
@@ -109,6 +115,12 @@ function isWinner(player: PlayerRef): boolean {
 
 .star {
   font-size: clamp(14px, 2.4vmin, 22px);
+  line-height: 1;
+  font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
+}
+
+.trophy {
+  font-size: clamp(22px, 3.6vmin, 34px);
   line-height: 1;
   font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
 }

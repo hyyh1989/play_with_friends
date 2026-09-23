@@ -64,5 +64,11 @@
     "size4": "4 pairs",
     "size6": "6 pairs",
     "size8": "8 pairs"
+  },
+  "snakes": {
+    "players2": "2 players",
+    "players3": "3 players",
+    "players4": "4 players",
+    "roll": "Roll the dice"
   }
 }
