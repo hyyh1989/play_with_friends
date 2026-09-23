@@ -100,27 +100,19 @@ const turnArcs = computed(() =>
   [COLS, COLS * 2, COLS * 3, COLS * 4].map((square) => {
     const a = center(square)
     const b = center(square + 1)
-    // 靠右边那一行往右鼓，靠左边那一行往左鼓
+    // 弧要朝棋盘外侧鼓出去：右边那一行往右鼓，左边那一行往左鼓。
+    // 注意 SVG 的 y 轴向下，sweep=1（顺时针）从下往上是绕【左】边走 ——
+    // 所以靠右的要用 sweep=0，直觉上正好相反，写反了弧就朝里扣。
     const onRight = cellPosition(square).col === COLS - 1
-    const sweep = onRight ? 1 : 0
+    const sweep = onRight ? 0 : 1
     const r = 0.46
-    const tip = onRight ? -1 : 1
     return {
-      d: `M ${a.x} ${a.y - 0.12} A ${r} ${r} 0 0 ${sweep} ${b.x} ${b.y + 0.12}`,
-      head: `${b.x + 0.17 * tip},${b.y + 0.3} ${b.x},${b.y + 0.1} ${b.x - 0.04 * tip},${b.y + 0.34}`,
+      d: `M ${a.x} ${a.y - 0.12} A ${r} ${r} 0 0 ${sweep} ${b.x} ${b.y + 0.14}`,
+      // 对称的 V 形箭头，朝上 —— 指出"从这里拐上去"
+      head: `${b.x - 0.15},${b.y + 0.34} ${b.x},${b.y + 0.14} ${b.x + 0.15},${b.y + 0.34}`,
     }
   }),
 )
-
-/** 起点上的方向箭头：告诉你第一步往右走 */
-const startArrow = computed(() => {
-  const a = center(1)
-  const y = a.y + 0.33
-  return {
-    d: `M ${a.x + 0.05} ${y} L ${a.x + 0.85} ${y}`,
-    head: `${a.x + 0.62},${y - 0.16} ${a.x + 0.9},${y} ${a.x + 0.62},${y + 0.16}`,
-  }
-})
 
 /** 梯子画成真的梯子：两根边梁 + 若干横档 */
 const ladders = computed(() =>
@@ -413,7 +405,11 @@ const FACES = [
           }"
         >
           <span class="num">{{ cell.square }}</span>
-          <span v-if="cell.square === 1" class="mark">🏠</span>
+          <template v-if="cell.square === 1">
+            <span class="mark home-mark">🏠</span>
+            <!-- 起点的方向提示：小房子底下一个小箭头，说明第一步往右走 -->
+            <span class="start-hint">→</span>
+          </template>
           <span v-else-if="cell.square === BOARD_SIZE" class="mark">🏁</span>
         </div>
 
@@ -424,11 +420,6 @@ const FACES = [
             <polyline :points="a.head" />
           </g>
 
-          <!-- 起点方向：第一步往右走 -->
-          <g class="turn">
-            <path :d="startArrow.d" />
-            <polyline :points="startArrow.head" />
-          </g>
 
           <!-- 梯子：两根边梁加横档 -->
           <g v-for="(l, i) in ladders" :key="`L${i}`" class="ladder-g">
@@ -660,6 +651,20 @@ const FACES = [
   font-size: clamp(16px, 3vmin, 30px);
   line-height: 1;
   font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
+}
+
+.home-mark {
+  transform: translateY(-16%);
+}
+
+/* 用文字箭头而不是 emoji：小、细、不抢戏，只是个提示 */
+.start-hint {
+  position: absolute;
+  bottom: 9%;
+  font-size: clamp(11px, 1.9vmin, 19px);
+  font-weight: 700;
+  line-height: 1;
+  color: rgba(61, 44, 30, 0.55);
 }
 
 .overlay {
