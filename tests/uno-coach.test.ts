@@ -67,14 +67,14 @@ describe('教学引导 · 什么时候提示', () => {
 
   it('见过一次之后就不啰嗦了 —— 除非她卡住', () => {
     const state = rig([card('number', 'red', 3)], card('number', 'red', 1))
-    const seen: CoachProgress = { colorMatch: 1 }
+    const seen: CoachProgress = { colorMatch: 1, opponentCount: MASTERY }
     expect(nextHint(state, seen, 1000, IDLE)).toBeNull()
     expect(nextHint(state, seen, IDLE, IDLE)).toMatchObject({ id: 'colorMatch', first: false })
   })
 
   it('做对 3 次就不再提示这条规则', () => {
     const state = rig([card('number', 'red', 3)], card('number', 'red', 1))
-    const mastered: CoachProgress = { colorMatch: MASTERY }
+    const mastered: CoachProgress = { colorMatch: MASTERY, opponentCount: MASTERY }
     // 已掌握同色，且没有别的可教 —— 卡住时只给一句泛泛的鼓励
     const hint = nextHint(state, mastered, IDLE, IDLE)
     expect(hint?.voice).toBe('uno.tryThis')
@@ -88,12 +88,34 @@ describe('教学引导 · 什么时候提示', () => {
     expect(hint?.target).toEqual({ kind: 'pile' })
   })
 
+  it('【实测反馈修的】没讲过的规则优先：同色才讲过一次，遇到同数字机会要马上讲', () => {
+    // 第一版写反了：只要同色还没学满 3 次就一直教同色，
+    // 结果"数字一样也能出"从头到尾没讲过
+    const state = rig(
+      [card('number', 'red', 3), card('number', 'blue', 1)],
+      card('number', 'red', 1),
+    )
+    const hint = nextHint(state, { colorMatch: 1 }, 0, IDLE)
+    expect(hint).toMatchObject({ id: 'numberMatch', first: true, voice: 'uno.matchNumber' })
+  })
+
+  it('会出牌之后才讲"对手还剩几张"，不会一上来就讲', () => {
+    const state = rig([card('number', 'red', 3)], card('number', 'red', 1))
+    // 同色都还没讲过时，先教出牌
+    expect(nextHint(state, {}, 0, IDLE)).toMatchObject({ id: 'colorMatch' })
+    // 同色讲过、且没有别的新规则可讲时，才讲对手牌数
+    expect(nextHint(state, { colorMatch: 1 }, 0, IDLE)).toMatchObject({
+      id: 'opponentCount',
+      voice: 'uno.opponentCount',
+    })
+  })
+
   it('同色学会了、同数字还没学 —— 优先教没学会的那条', () => {
     const state = rig(
       [card('number', 'red', 3), card('number', 'blue', 1)],
       card('number', 'red', 1),
     )
-    const hint = nextHint(state, { colorMatch: MASTERY }, 0, IDLE)
+    const hint = nextHint(state, { colorMatch: MASTERY, opponentCount: MASTERY }, 0, IDLE)
     expect(hint).toMatchObject({ id: 'numberMatch', voice: 'uno.matchNumber' })
     expect(hint?.target).toEqual({ kind: 'card', cardId: 'xnumberblue1' })
   })

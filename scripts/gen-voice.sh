@@ -50,7 +50,7 @@ uno.match.red|这张也是红色的，和中间的一样，点它就可以出。
 uno.match.yellow|这张也是黄色的，和中间的一样，点它就可以出。|This one is yellow too, just like the middle card. Tap it to play it.|이 카드도 노란색이야. 가운데 카드랑 같아. 눌러서 내 보자.
 uno.match.green|这张也是绿色的，和中间的一样，点它就可以出。|This one is green too, just like the middle card. Tap it to play it.|이 카드도 초록색이야. 가운데 카드랑 같아. 눌러서 내 보자.
 uno.match.blue|这张也是蓝色的，和中间的一样，点它就可以出。|This one is blue too, just like the middle card. Tap it to play it.|이 카드도 파란색이야. 가운데 카드랑 같아. 눌러서 내 보자.
-uno.matchNumber|看，数字一样，颜色不一样也可以出哦。|Look, the number is the same. You can play it even if the colour is different.|봐, 숫자가 같지? 색이 달라도 낼 수 있어.
+uno.matchNumber|看，数字一样，颜色不一样也可以出。出了之后，颜色就变成这张的颜色啦。|Look, the number is the same. You can play it even if the colour is different. After that, the colour changes to this card.|봐, 숫자가 같지? 색이 달라도 낼 수 있어. 내고 나면 색이 이 카드 색으로 바뀌어.
 uno.mustDraw|都出不了？那就从这里摸一张。|Nothing you can play? Then take one card from here.|낼 카드가 없어? 그럼 여기서 한 장 가져와.
 uno.wildColor|这张牌可以变成任何颜色。你想要哪个颜色？|This card can become any colour. Which colour do you want?|이 카드는 아무 색이나 될 수 있어. 무슨 색으로 할까?
 uno.skip|出了这张，下一个人就轮空啦。|Play this one and the next player is skipped.|이걸 내면 다음 사람은 건너뛰어.
@@ -59,6 +59,8 @@ uno.draw2|下一个人要摸两张牌。|The next player takes two cards.|다음
 uno.tryThis|点这张试试看。|Try tapping this one.|이걸 한번 눌러 볼까?
 uno.wellDone|真棒！|Well done!|잘했어!
 uno.uno|只剩一张啦，优诺！|Only one card left. Uno!|이제 한 장 남았어. 우노!
+uno.win|牌都出完啦，你赢了！|All your cards are gone. You win!|카드를 다 냈어. 네가 이겼어!
+uno.opponentCount|这里能看到，对手还剩几张牌。|Here you can see how many cards your friend has left.|여기서 친구한테 카드가 몇 장 남았는지 볼 수 있어.
 '
 
 run_locale() {

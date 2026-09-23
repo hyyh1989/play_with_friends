@@ -26,12 +26,16 @@ export type HintId =
   | 'numberMatch'
   | 'mustDraw'
   | 'wildColor'
-  | 'uno'
+  | 'opponentCount'
 
 export interface Hint {
   id: HintId
   /** 指向哪里 */
-  target: { kind: 'card'; cardId: string } | { kind: 'pile' } | { kind: 'colors' }
+  target:
+    | { kind: 'card'; cardId: string }
+    | { kind: 'pile' }
+    | { kind: 'colors' }
+    | { kind: 'opponent' }
   /** 要播的语音 key（core/audio 的 speak） */
   voice: string
   /** 第一次遇到这条规则 —— 第一次要立刻讲，之后只在孩子卡住时才提示 */
@@ -49,6 +53,11 @@ export function isMastered(progress: CoachProgress, id: HintId): boolean {
 export function allMastered(progress: CoachProgress): boolean {
   const ids: HintId[] = ['colorMatch', 'numberMatch', 'mustDraw', 'wildColor']
   return ids.every((id) => isMastered(progress, id))
+}
+
+/** 这条规则一次都没讲过 */
+function unseen(progress: CoachProgress, id: HintId): boolean {
+  return (progress[id] ?? 0) === 0
 }
 
 function colorVoice(color: CardColor): string {
@@ -75,31 +84,46 @@ export function nextHint(
   // 万能牌的选色弹层由界面单独触发，这里不管
 
   const playables = hand.filter((c) => canPlay(state, c))
+  const top = topCard(state)
+  const sameColor = playables.find((c) => c.color === state.activeColor)
+  const sameNumber = playables.find(
+    (c) =>
+      c.kind === 'number' &&
+      top.kind === 'number' &&
+      c.value === top.value &&
+      c.color !== state.activeColor,
+  )
 
-  // 一张都出不了 —— 教"从摸牌堆拿一张"
+  /*
+   * 顺序很重要：**从没讲过的规则优先**。
+   *
+   * 第一版写反了 —— 只要"同色"还没学满 3 次就一直教同色，结果"数字一样也能出"
+   * 这条从头到尾没讲过（用户实测反馈）。已经讲过的规则不该挡住没讲过的。
+   */
   if (playables.length === 0) {
     return gate('mustDraw', { kind: 'pile' }, 'uno.mustDraw')
   }
 
-  // 有牌可出：优先教还没学会的那一条
-  const top = topCard(state)
-  const sameColor = playables.find((c) => c.color === state.activeColor)
-  const sameNumber = playables.find(
-    (c) => c.kind === 'number' && top.kind === 'number' && c.value === top.value && c.color !== state.activeColor,
-  )
+  if (sameColor && unseen(progress, 'colorMatch')) {
+    return first('colorMatch', { kind: 'card', cardId: sameColor.id }, colorVoice(sameColor.color as CardColor))
+  }
+  if (sameNumber && unseen(progress, 'numberMatch')) {
+    return first('numberMatch', { kind: 'card', cardId: sameNumber.id }, 'uno.matchNumber')
+  }
+  // 会出牌之后，再告诉她"可以盯着对手还剩几张"
+  if (unseen(progress, 'opponentCount') && state.players.length > 1 && !unseen(progress, 'colorMatch')) {
+    return first('opponentCount', { kind: 'opponent' }, 'uno.opponentCount')
+  }
 
+  // 讲过但还没熟的：不主动打扰，卡住了才提示
   if (sameColor && !isMastered(progress, 'colorMatch')) {
-    return gate(
-      'colorMatch',
-      { kind: 'card', cardId: sameColor.id },
-      colorVoice(sameColor.color as CardColor),
-    )
+    return gate('colorMatch', { kind: 'card', cardId: sameColor.id }, colorVoice(sameColor.color as CardColor))
   }
   if (sameNumber && !isMastered(progress, 'numberMatch')) {
     return gate('numberMatch', { kind: 'card', cardId: sameNumber.id }, 'uno.matchNumber')
   }
 
-  // 都学会了，就只在卡住时指一下能出的牌，不再说话
+  // 都学会了，只在卡住时指一下能出的牌
   if (idle >= idleThreshold) {
     return {
       id: 'colorMatch',
@@ -110,10 +134,12 @@ export function nextHint(
   }
   return null
 
+  function first(id: HintId, target: Hint['target'], voice: string): Hint {
+    return { id, target, voice, first: true }
+  }
+
   function gate(id: HintId, target: Hint['target'], voice: string): Hint | null {
-    const seen = progress[id] ?? 0
-    // 第一次遇到：立刻教。之后：她自己想得出来就别打扰，卡住了才提示。
-    if (seen === 0) return { id, target, voice, first: true }
+    if (unseen(progress, id)) return first(id, target, voice)
     if (idle >= idleThreshold) return { id, target, voice, first: false }
     return null
   }

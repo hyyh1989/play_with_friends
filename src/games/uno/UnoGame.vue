@@ -23,7 +23,7 @@ import {
   type UnoState,
 } from './rules'
 import { chooseAiAction } from './ai'
-import { allMastered, nextHint, recordSuccess, type Hint } from './coach'
+import { allMastered, MASTERY, nextHint, recordSuccess, type Hint } from './coach'
 
 const AI_THINK_MS = 900
 const WIN_CELEBRATE_MS = 1800
@@ -218,6 +218,13 @@ function setHint(next: Hint | null) {
   if (next && next.voice !== lastVoice) {
     void speak(next.voice)
     lastVoice = next.voice
+    // 纯告知类的提示没有对应动作，讲过就算数，否则会一直重复讲
+    if (next.id === 'opponentCount') {
+      settings.coachProgress = {
+        ...settings.coachProgress,
+        opponentCount: (settings.coachProgress.opponentCount ?? 0) + MASTERY,
+      }
+    }
   }
   if (!next) lastVoice = ''
   hint.value = next
@@ -229,6 +236,10 @@ const hintTarget = computed<HTMLElement | null>(() => {
   if (!h) return null
   if (h.target.kind === 'pile') return pileEl.value
   if (h.target.kind === 'colors') return swatchesEl.value
+  if (h.target.kind === 'opponent') {
+    const first = state.value?.players.find((p) => p.id !== 'child')
+    return first ? seatEls.get(first.id) ?? null : null
+  }
   return handRefs.get(h.target.cardId) ?? null
 })
 
@@ -289,6 +300,7 @@ watch(
     if (atUno.length > 0 && unoFlash.value !== atUno[0]) {
       unoFlash.value = atUno[0]
       playSfx('success')
+      if (atUno[0] === 'child') void speak('uno.uno')
       later(() => (unoFlash.value = null), 1400)
     } else if (atUno.length === 0) {
       unoFlash.value = null
@@ -307,6 +319,8 @@ watch(
 
     if (isFinished(current)) {
       playSfx('celebrate')
+      // 说清楚"为什么结束了"—— 孩子出完最后一张牌时并不知道那就是赢
+      if (getWinner(current) === 'child') void speak('uno.win')
       later(() => (showResult.value = true), WIN_CELEBRATE_MS)
       return
     }
