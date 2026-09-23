@@ -2,7 +2,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import GameCard from '../components/GameCard.vue'
-import ParentGate from '../components/ParentGate.vue'
+import SettingsButton from '../components/SettingsButton.vue'
 import AvatarPicker from '../components/AvatarPicker.vue'
 import { listGames } from '../core/game-registry'
 import { UPCOMING } from '../games'
@@ -18,9 +18,7 @@ const games = listGames()
 function openGame(id: string) {
   playSfx('tap')
   void speak(`game.${id}`)
-  // 用路径而非路由名：阶段 1 才会有 /game/:id 这条路由，在那之前
-  // 兜底的 catch-all 会把它重定向回首页，而不是抛异常
-  router.push(`/game/${id}`)
+  router.push({ name: 'game', params: { id } })
 }
 
 /** 还没做完的游戏：给一个温和的反馈，不是报错音 */
@@ -36,7 +34,7 @@ function tapUpcoming(id: string) {
       <button class="avatar pressable" @click="showAvatarPicker = true">
         <span class="avatar-emoji">{{ settings.avatar }}</span>
       </button>
-      <ParentGate @open="router.push({ name: 'parent' })" />
+      <SettingsButton @click="router.push({ name: 'parent' })" />
     </header>
 
     <main class="grid">

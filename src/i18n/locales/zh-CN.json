@@ -7,9 +7,15 @@
     "chooseGame": "选一个游戏"
   },
   "games": {
-    "memory": { "name": "翻牌配对" },
-    "snakes": { "name": "蛇梯棋" },
-    "uno": { "name": "UNO" }
+    "memory": {
+      "name": "翻牌配对"
+    },
+    "snakes": {
+      "name": "蛇梯棋"
+    },
+    "uno": {
+      "name": "UNO"
+    }
   },
   "common": {
     "soon": "马上就来",
@@ -17,7 +23,9 @@
     "otherGame": "换个游戏",
     "back": "返回",
     "close": "关闭",
-    "yourTurn": "轮到你了"
+    "yourTurn": "轮到你了",
+    "start": "开始",
+    "exit": "退出"
   },
   "difficulty": {
     "label": "难度",
@@ -49,5 +57,12 @@
     "player1": "小熊",
     "player2": "小兔",
     "player3": "小猫"
+  },
+  "memory": {
+    "modeSolo": "自己玩",
+    "modeAi": "和小伙伴一起玩",
+    "size4": "4 对牌",
+    "size6": "6 对牌",
+    "size8": "8 对牌"
   }
 }

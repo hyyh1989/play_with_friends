@@ -17,15 +17,17 @@ an app — fullscreen, offline-capable.
 
 ## Status
 
-**Stage 0 (foundations) is done. There are no playable games yet.** The home screen shows
-three dimmed placeholder cards. See [docs/ROADMAP.md](docs/ROADMAP.md).
+**Memory Match is playable.** See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 | Stage | What | State |
 |---|---|---|
 | 0 | Foundations: PWA shell, game module interface, audio, settings | done |
-| 1 | Memory Match | next |
+| 1 | Memory Match — solo or vs AI, 4/6/8 pairs | built, awaiting the real test (a child) |
 | 2 | Snakes & Ladders | planned |
 | 3 | UNO (full rules, configurable card set) | planned |
+
+"Built" is not "done" here: a stage is finished when a 5-year-old plays it through without
+asking an adult for help.
 
 ## Quick start
 

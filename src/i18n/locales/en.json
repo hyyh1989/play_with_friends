@@ -7,9 +7,15 @@
     "chooseGame": "Pick a game"
   },
   "games": {
-    "memory": { "name": "Memory Match" },
-    "snakes": { "name": "Snakes & Ladders" },
-    "uno": { "name": "UNO" }
+    "memory": {
+      "name": "Memory Match"
+    },
+    "snakes": {
+      "name": "Snakes & Ladders"
+    },
+    "uno": {
+      "name": "UNO"
+    }
   },
   "common": {
     "soon": "Coming soon",
@@ -17,7 +23,9 @@
     "otherGame": "Another game",
     "back": "Back",
     "close": "Close",
-    "yourTurn": "Your turn"
+    "yourTurn": "Your turn",
+    "start": "Start",
+    "exit": "Exit"
   },
   "difficulty": {
     "label": "Difficulty",
@@ -49,5 +57,12 @@
     "player1": "Bear",
     "player2": "Bunny",
     "player3": "Kitty"
+  },
+  "memory": {
+    "modeSolo": "Play alone",
+    "modeAi": "Play with a friend",
+    "size4": "4 pairs",
+    "size6": "6 pairs",
+    "size8": "8 pairs"
   }
 }

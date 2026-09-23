@@ -7,9 +7,15 @@
     "chooseGame": "게임을 골라요"
   },
   "games": {
-    "memory": { "name": "카드 짝 맞추기" },
-    "snakes": { "name": "뱀과 사다리" },
-    "uno": { "name": "우노" }
+    "memory": {
+      "name": "카드 짝 맞추기"
+    },
+    "snakes": {
+      "name": "뱀과 사다리"
+    },
+    "uno": {
+      "name": "우노"
+    }
   },
   "common": {
     "soon": "곧 나와요",
@@ -17,7 +23,9 @@
     "otherGame": "다른 게임",
     "back": "뒤로",
     "close": "닫기",
-    "yourTurn": "너의 차례야"
+    "yourTurn": "너의 차례야",
+    "start": "시작",
+    "exit": "나가기"
   },
   "difficulty": {
     "label": "난이도",
@@ -49,5 +57,12 @@
     "player1": "곰돌이",
     "player2": "토끼",
     "player3": "야옹이"
+  },
+  "memory": {
+    "modeSolo": "혼자 하기",
+    "modeAi": "친구와 하기",
+    "size4": "4쌍",
+    "size6": "6쌍",
+    "size8": "8쌍"
   }
 }
