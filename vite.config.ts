@@ -2,7 +2,21 @@ import { defineConfig } from 'vitest/config'
 import vue from '@vitejs/plugin-vue'
 import { VitePWA } from 'vite-plugin-pwa'
 
+/**
+ * 构建时间戳。PWA 会缓存，线上到底是不是新版，靠家长设置页底部这行核对。
+ *
+ * 注：`wrangler deploy` 会自作主张往这里插 @cloudflare/vite-plugin。
+ * 这是个纯静态站，不需要它 —— 部署只是把 dist/ 传上去（见 wrangler.jsonc）。
+ * 如果它又被加回来了，删掉即可。
+ */
+const buildStamp = new Date()
+  .toLocaleString('sv-SE', { timeZone: 'Asia/Shanghai' })
+  .slice(0, 16)
+
 export default defineConfig({
+  define: {
+    __BUILD_TIME__: JSON.stringify(buildStamp),
+  },
   plugins: [
     vue(),
     VitePWA({

@@ -1,0 +1,14 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "play-with-friends",
+  "compatibility_date": "2026-09-21",
+  "observability": {
+    "enabled": true
+  },
+  // 纯静态站：没有后端代码，部署就是把 dist/ 传上去
+  "assets": {
+    "directory": "./dist",
+    // hash 路由 + PWA：任何未知路径都交给 index.html
+    "not_found_handling": "single-page-application"
+  }
+}

@@ -10,6 +10,7 @@ const router = useRouter()
 const settings = useSettingsStore()
 const { t } = useI18n()
 
+const buildTime = __BUILD_TIME__
 const difficulties: Difficulty[] = ['easy', 'normal', 'serious']
 const unoLevels: UnoLevel[] = [1, 2, 3, 4]
 const playtimeOptions = [0, 15, 20, 30]
@@ -118,6 +119,9 @@ function handleReset() {
           {{ $t('parent.reset') }}
         </button>
       </section>
+
+      <!-- 核对线上是不是新版用的（PWA 会缓存旧版本） -->
+      <p class="version">{{ buildTime }}</p>
     </div>
   </div>
 </template>
@@ -225,6 +229,14 @@ h1 {
 
 .toggle.on .knob {
   transform: translateX(30px);
+}
+
+.version {
+  margin: 4px 0 16px;
+  font-size: 12px;
+  color: var(--ink-soft);
+  text-align: center;
+  opacity: 0.6;
 }
 
 .danger {
