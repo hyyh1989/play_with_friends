@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref, shallowRef, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import GameResult from '../../components/GameResult.vue'
 import UnoCard from './UnoCard.vue'
-import { playSfx } from '../../core/audio'
+import PointingHand from '../../components/PointingHand.vue'
+import { playSfx, speak } from '../../core/audio'
 import { useSettingsStore, AVATARS } from '../../stores/settings'
 import type { PlayerRef } from '../../core/types'
 import {
@@ -22,16 +23,30 @@ import {
   type UnoState,
 } from './rules'
 import { chooseAiAction } from './ai'
+import { allMastered, nextHint, recordSuccess, type Hint } from './coach'
 
 const AI_THINK_MS = 900
 const WIN_CELEBRATE_MS = 1800
 /** 一张牌飞过去要多久 */
 const FLY_MS = 420
+/** 轮到孩子之后等多久还没动作，就轻轻指一下 */
+const IDLE_MS = 5000
 
 const router = useRouter()
 const settings = useSettingsStore()
 
-const phase = ref<'setup' | 'playing'>('setup')
+/*
+ * ask = 问"要我教你吗"；setup = 选人数；playing = 对局。
+ * 已经全部学会、或家长关掉教学的话，直接从 setup 开始，不再问。
+ */
+const phase = ref<'ask' | 'setup' | 'playing'>('setup')
+const coachOn = ref(false)
+const hint = shallowRef<Hint | null>(null)
+const handRefs = new Map<string, HTMLElement>()
+const swatchesEl = ref<HTMLElement | null>(null)
+let turnStartedAt = 0
+let coachTimer: number | undefined
+let lastVoice = ''
 const playerCount = ref(2)
 const state = shallowRef<UnoState | null>(null)
 const showResult = ref(false)
@@ -100,6 +115,15 @@ function clearTimers() {
 
 onUnmounted(() => clearTimeout(flyTimer))
 onUnmounted(clearTimers)
+onUnmounted(() => clearInterval(coachTimer))
+
+onMounted(() => {
+  const needsTeaching = settings.tutorialEnabled && !allMastered(settings.coachProgress)
+  if (needsTeaching) {
+    phase.value = 'ask'
+    void speak('uno.ask')
+  }
+})
 
 const finished = computed(() => (state.value ? isFinished(state.value) : false))
 const activeId = computed(() => (state.value ? currentPlayer(state.value) : null))
@@ -145,8 +169,68 @@ function start() {
     seed: Date.now(),
   })
   phase.value = 'playing'
+  turnStartedAt = Date.now()
+  clearInterval(coachTimer)
+  if (coachOn.value) coachTimer = window.setInterval(evaluateHint, 500)
   playSfx('tap')
 }
+
+/** 开场选择：跟我学 / 直接玩 */
+function startWithCoach() {
+  coachOn.value = true
+  playerCount.value = 2 // 教学时固定两人，少一个要做的决定
+  start()
+}
+
+function skipCoach() {
+  coachOn.value = false
+  phase.value = 'setup'
+  playSfx('tap')
+}
+
+/** 记下每张手牌对应的 DOM 元素，手指要靠它定位 */
+function setHandRef(cardId: string, el: unknown) {
+  if (el instanceof HTMLElement) handRefs.set(cardId, el)
+  else handRefs.delete(cardId)
+}
+
+/** 现在该不该指、指哪里。每 500ms 跑一次，也在每次状态变化后跑 */
+function evaluateHint() {
+  if (!coachOn.value || !state.value || finished.value || !myTurn.value) {
+    setHint(null)
+    return
+  }
+  // 万能牌的选色弹层单独提示
+  if (pendingWildId.value) {
+    setHint({
+      id: 'wildColor',
+      target: { kind: 'colors' },
+      voice: 'uno.wildColor',
+      first: (settings.coachProgress.wildColor ?? 0) === 0,
+    })
+    return
+  }
+  setHint(nextHint(state.value, settings.coachProgress, Date.now() - turnStartedAt, IDLE_MS))
+}
+
+/** 同一条提示只念一次，别反复念到烦 */
+function setHint(next: Hint | null) {
+  if (next && next.voice !== lastVoice) {
+    void speak(next.voice)
+    lastVoice = next.voice
+  }
+  if (!next) lastVoice = ''
+  hint.value = next
+}
+
+/** 提示指向的那个 DOM 元素 */
+const hintTarget = computed<HTMLElement | null>(() => {
+  const h = hint.value
+  if (!h) return null
+  if (h.target.kind === 'pile') return pileEl.value
+  if (h.target.kind === 'colors') return swatchesEl.value
+  return handRefs.get(h.target.cardId) ?? null
+})
 
 function dispatch(action: UnoAction) {
   const current = state.value
@@ -155,6 +239,14 @@ function dispatch(action: UnoAction) {
   if (next === current) {
     playSfx('nope')
     return
+  }
+  // 孩子自己做对了一次，对应规则的熟练度 +1（做够几次提示就撤掉）
+  if (coachOn.value && currentPlayer(current) === 'child') {
+    const played =
+      action.type === 'play'
+        ? (current.hands.child ?? []).find((c) => c.id === action.cardId) ?? null
+        : null
+    settings.coachProgress = recordSuccess(settings.coachProgress, current, played)
   }
   state.value = next
 }
@@ -222,8 +314,11 @@ watch(
     const player = current.players.find((p) => p.id === currentPlayer(current))
     if (player?.kind !== 'ai') {
       busy.value = false
+      turnStartedAt = Date.now()
+      evaluateHint()
       return
     }
+    setHint(null)
     busy.value = true
     later(() => {
       const action = chooseAiAction(current, player.id, settings.difficulty)
@@ -240,7 +335,30 @@ function goHome() {
 </script>
 
 <template>
-  <div v-if="phase === 'setup'" class="setup safe-area">
+  <!--
+    问"要我教你吗"。不用文字问，用两张看得见的卡片：
+    左边=一只手指着牌（跟我学），右边=牌桌和播放键（直接玩）。
+    5 岁孩子理解不了"学习"这个抽象词，但看得懂这两张图。
+  -->
+  <div v-if="phase === 'ask'" class="setup safe-area">
+    <button class="corner-back pressable" :aria-label="$t('common.back')" @click="goHome">←</button>
+    <div class="choices">
+      <button class="choice ask-choice pressable" :aria-label="$t('uno.teachMe')" @click="startWithCoach">
+        <span class="ask-art">
+          <span class="ask-card"><UnoCard :card="{ id: 'demo', kind: 'number', color: 'red', value: 5 }" /></span>
+          <span class="ask-hand">👆</span>
+        </span>
+      </button>
+      <button class="choice ask-choice pressable" :aria-label="$t('uno.justPlay')" @click="skipCoach">
+        <span class="ask-art">
+          <span class="ask-card dim"><UnoCard back /></span>
+          <span class="ask-play">▶</span>
+        </span>
+      </button>
+    </div>
+  </div>
+
+  <div v-else-if="phase === 'setup'" class="setup safe-area">
     <button class="corner-back pressable" :aria-label="$t('common.back')" @click="goHome">←</button>
     <div class="choices">
       <button
@@ -314,6 +432,7 @@ function goHome() {
         <button
           v-for="card in myHand"
           :key="card.id"
+          :ref="(el) => setHandRef(card.id, el)"
           class="hand-slot pressable"
           :class="{
             playable: playable(card) && settings.assistHighlight,
@@ -332,7 +451,7 @@ function goHome() {
     </div>
 
     <div v-if="pendingWildId" class="color-picker" @click.self="pendingWildId = null">
-      <div class="swatches">
+      <div ref="swatchesEl" class="swatches">
         <button
           v-for="color in COLORS"
           :key="color"
@@ -343,6 +462,9 @@ function goHome() {
         />
       </div>
     </div>
+
+    <!-- 教学的手指：指着该点的东西，第一次教某条规则时把周围压暗 -->
+    <PointingHand :target="hintTarget" :spotlight="hint?.first" />
 
     <GameResult
       v-if="showResult && state"
@@ -404,6 +526,64 @@ function goHome() {
 .mode-avatars {
   display: flex;
   gap: 6px;
+}
+
+/* 开场那两张"跟我学 / 直接玩"的图 */
+.ask-choice {
+  padding: clamp(16px, 3vmin, 30px);
+}
+
+.ask-art {
+  position: relative;
+  display: block;
+  width: clamp(80px, 15vmin, 140px);
+}
+
+.ask-card {
+  display: block;
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  container-type: inline-size;
+}
+
+.ask-card.dim {
+  opacity: 0.75;
+}
+
+.ask-hand {
+  position: absolute;
+  right: -14%;
+  bottom: -10%;
+  font-size: clamp(34px, 6vmin, 56px);
+  line-height: 1;
+  font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
+  animation: poke-demo 1.2s ease-in-out infinite;
+}
+
+.ask-play {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  place-items: center;
+  width: 58%;
+  aspect-ratio: 1;
+  font-size: clamp(22px, 4vmin, 38px);
+  color: #fff;
+  background: var(--accent-2);
+  border-radius: 50%;
+  box-shadow: var(--shadow);
+  transform: translate(-50%, -50%);
+}
+
+@keyframes poke-demo {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  50% {
+    transform: translate(-5px, -12px);
+  }
 }
 
 .mode-avatar {

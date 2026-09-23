@@ -51,7 +51,11 @@
     "playtimeOff": "Off",
     "playtimeMinutes": "{n} minutes",
     "reset": "Clear all data",
-    "resetConfirm": "Clear all progress and settings?"
+    "resetConfirm": "Clear all progress and settings?",
+    "tutorial": "UNO tutorial",
+    "tutorialRestart": "Restart the tutorial",
+    "tutorialRestartAction": "Restart",
+    "tutorialDone": "Reset ✓"
   },
   "ai": {
     "player1": "Bear",
@@ -73,6 +77,8 @@
   },
   "uno": {
     "draw": "Draw a card",
-    "chooseColor": "Pick a color"
+    "chooseColor": "Pick a color",
+    "teachMe": "Teach me",
+    "justPlay": "Just play"
   }
 }

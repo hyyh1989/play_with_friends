@@ -51,7 +51,11 @@
     "playtimeOff": "안 함",
     "playtimeMinutes": "{n}분",
     "reset": "기록 지우기",
-    "resetConfirm": "모든 기록과 설정을 지울까요?"
+    "resetConfirm": "모든 기록과 설정을 지울까요?",
+    "tutorial": "우노 튜토리얼",
+    "tutorialRestart": "튜토리얼 다시 하기",
+    "tutorialRestartAction": "다시 하기",
+    "tutorialDone": "초기화됨 ✓"
   },
   "ai": {
     "player1": "곰돌이",
@@ -73,6 +77,8 @@
   },
   "uno": {
     "draw": "카드 뽑기",
-    "chooseColor": "색을 골라요"
+    "chooseColor": "색을 골라요",
+    "teachMe": "가르쳐 줘",
+    "justPlay": "바로 하기"
   }
 }

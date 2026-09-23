@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useSettingsStore, type UnoLevel } from '../stores/settings'
@@ -11,6 +12,14 @@ const settings = useSettingsStore()
 const { t } = useI18n()
 
 const buildTime = __BUILD_TIME__
+const restarted = ref(false)
+
+function handleRestartTutorial() {
+  playSfx('tap')
+  settings.restartTutorial()
+  restarted.value = true
+  setTimeout(() => (restarted.value = false), 1600)
+}
 const difficulties: Difficulty[] = ['easy', 'normal', 'serious']
 const unoLevels: UnoLevel[] = [1, 2, 3, 4]
 const playtimeOptions = [0, 15, 20, 30]
@@ -81,6 +90,24 @@ function handleReset() {
           @click="settings.assistHighlight = !settings.assistHighlight"
         >
           <span class="knob" />
+        </button>
+      </section>
+
+      <section class="row">
+        <p class="label">{{ $t('parent.tutorial') }}</p>
+        <button
+          class="toggle pressable"
+          :class="{ on: settings.tutorialEnabled }"
+          @click="settings.tutorialEnabled = !settings.tutorialEnabled"
+        >
+          <span class="knob" />
+        </button>
+      </section>
+
+      <section class="row">
+        <p class="label">{{ $t('parent.tutorialRestart') }}</p>
+        <button class="chip pressable" @click="handleRestartTutorial">
+          {{ restarted ? $t('parent.tutorialDone') : $t('parent.tutorialRestartAction') }}
         </button>
       </section>
 

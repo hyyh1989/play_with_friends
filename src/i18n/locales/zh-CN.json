@@ -51,7 +51,11 @@
     "playtimeOff": "不提醒",
     "playtimeMinutes": "{n} 分钟",
     "reset": "清空记录",
-    "resetConfirm": "清空所有记录和设置？"
+    "resetConfirm": "清空所有记录和设置？",
+    "tutorial": "UNO 教学引导",
+    "tutorialRestart": "重新开始教学",
+    "tutorialRestartAction": "重来一遍",
+    "tutorialDone": "已重置 ✓"
   },
   "ai": {
     "player1": "小熊",
@@ -73,6 +77,8 @@
   },
   "uno": {
     "draw": "抽一张牌",
-    "chooseColor": "选一个颜色"
+    "chooseColor": "选一个颜色",
+    "teachMe": "跟我学",
+    "justPlay": "直接玩"
   }
 }
