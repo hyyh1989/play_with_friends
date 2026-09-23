@@ -7,19 +7,26 @@
  * 2. 设计原则要求每次触摸 100ms 内有听觉反馈 —— 所以用 WebAudio 而非
  *    HTMLAudioElement（后者首次播放有明显延迟），且音效预加载。
  *
- * 语音走 speak()，按当前语言解析到 /audio/voice/{locale}/{key}.wav。
+ * 语音走 speak()，按当前语言解析到 {base}audio/voice/{locale}/{key}.wav。
  * 缺文件时静默跳过 —— 阶段 0 只有音效、没有语音，其他语言的语音资产也还是空的，
  * 界面不能因为缺音频就不能用。
  */
 
 export type SfxKey = 'tap' | 'success' | 'flip' | 'celebrate' | 'nope'
 
+/*
+ * 路径必须带上构建时的 base，不能写死成 /audio/...。
+ * 这个站同时部署在两个地方：Cloudflare 在根路径，GitHub Pages 在
+ * /play_with_friends/ 子路径下。写死绝对路径的话镜像版所有音频都是 404。
+ */
+const BASE = import.meta.env.BASE_URL
+
 const SFX_FILES: Record<SfxKey, string> = {
-  tap: '/audio/sfx/tap.wav',
-  flip: '/audio/sfx/flip.wav',
-  success: '/audio/sfx/success.wav',
-  celebrate: '/audio/sfx/celebrate.wav',
-  nope: '/audio/sfx/nope.wav',
+  tap: `${BASE}audio/sfx/tap.wav`,
+  flip: `${BASE}audio/sfx/flip.wav`,
+  success: `${BASE}audio/sfx/success.wav`,
+  celebrate: `${BASE}audio/sfx/celebrate.wav`,
+  nope: `${BASE}audio/sfx/nope.wav`,
 }
 
 let ctx: AudioContext | null = null
@@ -119,6 +126,6 @@ export function playSfx(key: SfxKey, rate = 1): void {
 /** 播语音。缺文件静默跳过（其他语言的资产还没做）。 */
 export async function speak(key: string): Promise<void> {
   if (!unlocked) return
-  const buffer = await load(`/audio/voice/${voiceLocale}/${key}.wav`)
+  const buffer = await load(`${BASE}audio/voice/${voiceLocale}/${key}.wav`)
   if (buffer) playBuffer(buffer)
 }

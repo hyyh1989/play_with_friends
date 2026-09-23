@@ -1,0 +1,50 @@
+name: Deploy to GitHub Pages
+
+# 为什么有两个部署目标：
+# 主站在 Cloudflare（play.xiaotangyuan.workers.dev），但 workers.dev 这个域名
+# 在某些网络下被整域名屏蔽（韩国的朋友要挂 VPN 才能打开）。
+# GitHub Pages 是完全不同的域名，作为镜像，哪个能开用哪个。
+#
+# 主站仍然用本地 `npm run deploy` 手动发；这里是推到 main 就自动发镜像。
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同时只跑一个部署，新的推送取消排队中的旧任务
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run test
+      # 镜像挂在 /play_with_friends/ 子路径下，base 必须跟着变
+      - run: npm run build:pages
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist-pages
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
