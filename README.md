@@ -6,6 +6,10 @@ A small collection of board and card games for 5-6 year olds, played on an iPad.
 
 **▶ https://play.xiaotangyuan.workers.dev** — open it on an iPad and "Add to Home Screen".
 
+**Mirror: https://hyyh1989.github.io/play_with_friends/** — same app, different domain.
+Some networks block `workers.dev` wholesale (it is commonly used for reverse proxies), so if
+the main link does not load, use this one. Both are updated from the same source.
+
 ---
 
 ## What this is

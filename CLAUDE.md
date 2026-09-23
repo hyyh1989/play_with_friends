@@ -30,8 +30,16 @@ npm run test:watch  # 单元测试 watch 模式
 npm run typecheck   # 只做类型检查
 ```
 
-**线上地址**：https://play.xiaotangyuan.workers.dev （Cloudflare，免费）。
-`npm run deploy` 一条命令更新线上。账号子域名是 `xiaotangyuan`，以后每个应用都是
+**线上地址**（两个，内容一致）：
+- 主站 https://play.xiaotangyuan.workers.dev （Cloudflare）—— `npm run deploy` 手动发
+- 镜像 https://hyyh1989.github.io/play_with_friends/ （GitHub Pages）—— 推到 main 自动发
+
+**为什么要两个**：`workers.dev` 这个域名在某些网络下被整域名屏蔽（常被拿来搭反向代理），
+韩国的朋友要挂 VPN 才能打开主站。镜像是完全不同的域名，哪个能开用哪个。
+镜像挂在 `/play_with_friends/` 子路径下，所以**任何资源路径都不能写死成 `/xxx`**，
+要用 `import.meta.env.BASE_URL` 前缀（音频就踩过这个坑）。
+
+账号子域名是 `xiaotangyuan`，以后每个应用都是
 `<应用名>.xiaotangyuan.workers.dev`；本应用线上名叫 `play`（见 wrangler.jsonc），
 和仓库名 play_with_friends 不同是有意缩短。
 
