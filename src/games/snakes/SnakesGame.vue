@@ -22,8 +22,10 @@ import {
 } from './rules'
 import { chooseAiAction } from './ai'
 
-/** 骰子翻滚多久 */
-const DICE_MS = 900
+/** 骰子先快速乱转多久，再刹停到结果 —— 分两段，才像真的在掷 */
+const SPIN_MS = 560
+const SETTLE_MS = 430
+const DICE_MS = SPIN_MS + SETTLE_MS
 /** 棋子每走一格用多久，要跟得上数数的语速 */
 const STEP_MS = 200
 /** 落格后原地转一圈的时间 */
@@ -44,8 +46,10 @@ const state = shallowRef<SnakesState | null>(null)
 
 const displayPos = ref<Record<string, number>>({})
 const rolling = ref(false)
+const settling = ref(false)
 const diceFace = ref(1)
 const diceSpin = ref({ x: 0, y: 0 })
+let spinFrame: number | null = null
 const animating = ref(false)
 const landingId = ref<string | null>(null)
 const celebrating = ref(false)
@@ -58,6 +62,8 @@ function later(fn: () => void, ms: number) {
 function clearTimers() {
   timers.forEach(clearTimeout)
   timers = []
+  if (spinFrame !== null) cancelAnimationFrame(spinFrame)
+  spinFrame = null
 }
 onUnmounted(clearTimers)
 
@@ -85,18 +91,36 @@ const center = (square: number) => {
 
 /**
  * 每行走到头要折回上一行，这是蛇形棋盘最容易让人看不懂的地方。
- * 在折返处画一个向上的箭头，明确告诉你"从这里拐上去"。
+ * 在折返处画一段**半圆的掉头弧**（比直箭头更像"拐弯"），带箭头指向去处。
  *
- * （原本画过一条贯穿 50 格的折线，实测像一团方框，反而更乱，已去掉。
- * 让路径可读靠的是格子深浅交替 + 这几个折返箭头。）
+ * （原本画过一条贯穿 50 格的折线，实测像一团方框、反而更乱，已去掉。
+ * 让路径可读靠的是格子深浅交替 + 这几段掉头弧 + 起点的方向箭头。）
  */
-const turnArrows = computed(() =>
+const turnArcs = computed(() =>
   [COLS, COLS * 2, COLS * 3, COLS * 4].map((square) => {
     const a = center(square)
     const b = center(square + 1)
-    return { x: a.x, y1: a.y - 0.18, y2: b.y + 0.18 }
+    // 靠右边那一行往右鼓，靠左边那一行往左鼓
+    const onRight = cellPosition(square).col === COLS - 1
+    const sweep = onRight ? 1 : 0
+    const r = 0.46
+    const tip = onRight ? -1 : 1
+    return {
+      d: `M ${a.x} ${a.y - 0.12} A ${r} ${r} 0 0 ${sweep} ${b.x} ${b.y + 0.12}`,
+      head: `${b.x + 0.17 * tip},${b.y + 0.3} ${b.x},${b.y + 0.1} ${b.x - 0.04 * tip},${b.y + 0.34}`,
+    }
   }),
 )
+
+/** 起点上的方向箭头：告诉你第一步往右走 */
+const startArrow = computed(() => {
+  const a = center(1)
+  const y = a.y + 0.33
+  return {
+    d: `M ${a.x + 0.05} ${y} L ${a.x + 0.85} ${y}`,
+    head: `${a.x + 0.62},${y - 0.16} ${a.x + 0.9},${y} ${a.x + 0.62},${y + 0.16}`,
+  }
+})
 
 /** 梯子画成真的梯子：两根边梁 + 若干横档 */
 const ladders = computed(() =>
@@ -225,19 +249,39 @@ function landPiece(playerId: string) {
   later(() => (landingId.value = null), LAND_MS)
 }
 
+/** 落到目标面：在当前角度之后，找最近一个"朝向正确"的角度，保证只往一个方向转 */
+function settleAngle(current: number, target: number): number {
+  return Math.ceil((current + 200 - target) / 360) * 360 + target
+}
+
 function runMoveAnimation(move: NonNullable<SnakesState['lastMove']>) {
   animating.value = true
   rolling.value = true
+  settling.value = false
+  diceFace.value = move.roll
   playSfx('flip')
 
-  // 多转几圈再停到目标面，看起来像真的骰子在翻
-  const target = FACE_ROTATION[move.roll]
-  diceSpin.value = { x: target.x + 360 * 3, y: target.y + 360 * 2 }
-  diceFace.value = move.roll
+  // 第一段：逐帧快速乱转（没有过渡，纯靠改角度），看起来是在"掷"
+  const until = performance.now() + SPIN_MS
+  const spin = () => {
+    if (performance.now() >= until) {
+      // 第二段：刹停到结果那一面，带一点点回弹
+      settling.value = true
+      rolling.value = false
+      const target = FACE_ROTATION[move.roll]
+      diceSpin.value = {
+        x: settleAngle(diceSpin.value.x, target.x),
+        y: settleAngle(diceSpin.value.y, target.y),
+      }
+      spinFrame = null
+      return
+    }
+    diceSpin.value = { x: diceSpin.value.x + 23, y: diceSpin.value.y + 17 }
+    spinFrame = requestAnimationFrame(spin)
+  }
+  spinFrame = requestAnimationFrame(spin)
 
   later(() => {
-    rolling.value = false
-
     const steps = move.landed - move.from
     for (let i = 1; i <= steps; i++) {
       later(() => {
@@ -374,10 +418,16 @@ const FACES = [
         </div>
 
         <svg class="overlay" :viewBox="`0 0 ${COLS} ${ROWS}`">
-          <!-- 折返箭头：走到行尾从这里拐上去 -->
-          <g v-for="(a, i) in turnArrows" :key="`T${i}`" class="turn">
-            <line :x1="a.x" :y1="a.y1" :x2="a.x" :y2="a.y2" />
-            <polyline :points="`${a.x - 0.16},${a.y2 + 0.2} ${a.x},${a.y2} ${a.x + 0.16},${a.y2 + 0.2}`" />
+          <!-- 掉头弧：走到行尾从这里拐上去 -->
+          <g v-for="(a, i) in turnArcs" :key="`T${i}`" class="turn">
+            <path :d="a.d" />
+            <polyline :points="a.head" />
+          </g>
+
+          <!-- 起点方向：第一步往右走 -->
+          <g class="turn">
+            <path :d="startArrow.d" />
+            <polyline :points="startArrow.head" />
           </g>
 
           <!-- 梯子：两根边梁加横档 -->
@@ -433,7 +483,7 @@ const FACES = [
           :style="{ '--rx': `${diceSpin.x}deg`, '--ry': `${diceSpin.y}deg` }"
           @click="handleRoll"
         >
-          <span class="cube">
+          <span class="cube" :class="{ settling }">
             <span
               v-for="face in FACES"
               :key="face.value"
@@ -620,11 +670,11 @@ const FACES = [
   pointer-events: none;
 }
 
-.turn line,
+.turn path,
 .turn polyline {
   fill: none;
-  stroke: rgba(61, 44, 30, 0.42);
-  stroke-width: 0.075;
+  stroke: rgba(61, 44, 30, 0.58);
+  stroke-width: 0.105;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
@@ -772,6 +822,28 @@ const FACES = [
   animation: bob 1.5s ease-in-out infinite;
 }
 
+/* 掷的时候整颗骰子往上抛一下再落回来 */
+.dice.rolling {
+  opacity: 1;
+  animation: toss 560ms ease-in-out;
+}
+
+@keyframes toss {
+  0% {
+    transform: translateY(0) scale(1);
+  }
+  45% {
+    transform: translateY(-26px) scale(1.08);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+  }
+}
+
+/*
+ * 掷骰子分两段：先逐帧快速乱转（没有过渡，JS 每帧改角度），再刹停到结果那一面。
+ * 只用一段过渡转到结果的话，看起来是"数字变了"而不是"在掷骰子"。
+ */
 .cube {
   position: relative;
   display: block;
@@ -779,7 +851,10 @@ const FACES = [
   height: 100%;
   transform: rotateX(var(--rx, 0)) rotateY(var(--ry, 0));
   transform-style: preserve-3d;
-  transition: transform 900ms cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+.cube.settling {
+  transition: transform 430ms cubic-bezier(0.18, 1.2, 0.4, 1);
 }
 
 .face {
