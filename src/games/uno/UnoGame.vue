@@ -2,6 +2,7 @@
 import { computed, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import GameResult from '../../components/GameResult.vue'
+import UnoCard from './UnoCard.vue'
 import { playSfx } from '../../core/audio'
 import { useSettingsStore, AVATARS } from '../../stores/settings'
 import type { PlayerRef } from '../../core/types'
@@ -23,9 +24,9 @@ import {
 import { chooseAiAction } from './ai'
 
 const AI_THINK_MS = 900
-const EVENT_MS = 700
-/** 有人打完最后一张牌后，先让台面停一下再弹结算 */
 const WIN_CELEBRATE_MS = 1800
+/** 对手手牌最多铺开几张，再多就折叠 */
+const FAN_MAX = 7
 
 const router = useRouter()
 const settings = useSettingsStore()
@@ -35,9 +36,10 @@ const playerCount = ref(2)
 const state = shallowRef<UnoState | null>(null)
 const showResult = ref(false)
 const busy = ref(false)
-/** 选颜色的弹层：孩子点了万能牌之后才出现 */
 const pendingWildId = ref<string | null>(null)
 const unoFlash = ref<string | null>(null)
+/** 点了出不了的牌，抖一下给反馈 */
+const shakingId = ref<string | null>(null)
 
 let timers: number[] = []
 function later(fn: () => void, ms: number) {
@@ -61,9 +63,23 @@ const myHand = computed(() => state.value?.hands.child ?? [])
 const top = computed(() => (state.value ? topCard(state.value) : null))
 const others = computed(() => state.value?.players.filter((p) => p.id !== 'child') ?? [])
 
-/** 新手辅助：可以出的牌高亮放大，不能出的灰掉且点不动（家长端可关） */
+const COLOR_HEX: Record<CardColor, string> = {
+  red: '#e63462',
+  yellow: '#f9c22e',
+  green: '#00b884',
+  blue: '#2a9df4',
+}
+
 function playable(card: Card): boolean {
   return state.value ? canPlay(state.value, card) : false
+}
+
+function handCount(playerId: string): number {
+  return state.value?.hands[playerId]?.length ?? 0
+}
+
+function fanOf(playerId: string): number {
+  return Math.min(FAN_MAX, handCount(playerId))
 }
 
 function start() {
@@ -98,7 +114,14 @@ function dispatch(action: UnoAction) {
 }
 
 function tapCard(card: Card) {
-  if (!myTurn.value || !playable(card)) return
+  if (!myTurn.value) return
+  // 出不了的牌不是"点了没反应"，而是抖一下 + 轻提示音（铁律：立即反馈）
+  if (!playable(card)) {
+    playSfx('nope')
+    shakingId.value = card.id
+    later(() => (shakingId.value = null), 400)
+    return
+  }
   if (card.kind === 'wild' || card.kind === 'wild4') {
     pendingWildId.value = card.id
     playSfx('flip')
@@ -124,7 +147,6 @@ watch(
     if (!current) return
     clearTimers()
 
-    // 剩一张牌自动喊 UNO —— 孩子不需要做任何操作，也不会因为忘记被罚
     const atUno = playersAtUno(current)
     if (atUno.length > 0 && unoFlash.value !== atUno[0]) {
       unoFlash.value = atUno[0]
@@ -152,7 +174,7 @@ watch(
     later(() => {
       const action = chooseAiAction(current, player.id, settings.difficulty)
       if (action) dispatch(action)
-      later(() => (busy.value = false), EVENT_MS / 2)
+      later(() => (busy.value = false), 350)
     }, AI_THINK_MS)
   },
   { immediate: true },
@@ -160,31 +182,6 @@ watch(
 
 function goHome() {
   router.push('/')
-}
-
-const COLOR_HEX: Record<CardColor, string> = {
-  red: '#ef476f',
-  yellow: '#ffc93c',
-  green: '#06d6a0',
-  blue: '#4cc9f0',
-}
-
-/** 牌面上画什么：数字牌画数字，功能牌画图形 */
-function faceOf(card: Card): string {
-  switch (card.kind) {
-    case 'number':
-      return String(card.value)
-    case 'skip':
-      return '⊘'
-    case 'reverse':
-      return '⇄'
-    case 'draw2':
-      return '+2'
-    case 'wild4':
-      return '+4'
-    default:
-      return '★'
-  }
 }
 </script>
 
@@ -213,6 +210,7 @@ function faceOf(card: Card): string {
   <div v-else class="game safe-area">
     <header class="hud">
       <button class="exit-btn pressable" :aria-label="$t('common.back')" @click="goHome">←</button>
+
       <div class="opponents">
         <div
           v-for="player in others"
@@ -221,31 +219,41 @@ function faceOf(card: Card): string {
           :class="{ active: player.id === activeId, uno: unoFlash === player.id }"
         >
           <span class="seat-avatar">{{ player.avatar }}</span>
-          <!-- 对手剩几张牌用小牌背表示，不用数字 -->
-          <span class="counts">
-            <span v-for="n in state?.hands[player.id]?.length ?? 0" :key="n" class="mini" />
-          </span>
+          <!-- 对手手里有多少牌：铺开的牌背，看得见厚度 -->
+          <div class="fan">
+            <span v-for="n in fanOf(player.id)" :key="n" class="fan-card">
+              <UnoCard back />
+            </span>
+            <span class="fan-count">{{ handCount(player.id) }}</span>
+          </div>
         </div>
       </div>
     </header>
 
     <div class="table">
-      <!-- 当前颜色：万能牌改色之后，台面顶牌的颜色就不作数了 -->
-      <div class="color-orb" :style="{ background: COLOR_HEX[state?.activeColor ?? 'red'] }" />
-
-      <div v-if="top" class="card top" :style="{ '--c': COLOR_HEX[top.color ?? state!.activeColor] }">
-        <span class="face">{{ faceOf(top) }}</span>
-      </div>
-
+      <!-- 摸牌堆：叠起来才看得出是一摞可以抽的牌 -->
       <button
-        class="draw-pile pressable"
+        class="pile pressable"
         :class="{ ready: myTurn }"
         :disabled="!myTurn"
         :aria-label="$t('uno.draw')"
         @click="drawCard"
       >
-        <span class="pile-back" />
+        <span class="pile-layer l3"><UnoCard back /></span>
+        <span class="pile-layer l2"><UnoCard back /></span>
+        <span class="pile-layer l1"><UnoCard back /></span>
+        <span v-if="myTurn" class="pile-hint">+</span>
       </button>
+
+      <!-- 弃牌堆：外面一圈当前颜色，万能牌改色后这里跟着变 -->
+      <div
+        class="discard"
+        :style="{ background: COLOR_HEX[state?.activeColor ?? 'red'] }"
+      >
+        <div class="discard-card">
+          <UnoCard v-if="top" :card="top" />
+        </div>
+      </div>
     </div>
 
     <footer class="hand-bar" :class="{ mine: myTurn, uno: unoFlash === 'child' }">
@@ -253,22 +261,19 @@ function faceOf(card: Card): string {
         <button
           v-for="card in myHand"
           :key="card.id"
-          class="card hand-card pressable"
+          class="hand-slot pressable"
           :class="{
             playable: playable(card) && settings.assistHighlight,
-            dimmed: !playable(card) && settings.assistHighlight,
+            resting: !playable(card) && settings.assistHighlight,
+            shaking: shakingId === card.id,
           }"
-          :style="{ '--c': card.color ? COLOR_HEX[card.color] : '#3d2c1e' }"
-          :disabled="settings.assistHighlight && !playable(card)"
           @click="tapCard(card)"
         >
-          <span class="face">{{ faceOf(card) }}</span>
-          <span v-if="!card.color" class="rainbow" />
+          <UnoCard :card="card" />
         </button>
       </div>
     </footer>
 
-    <!-- 万能牌：先选颜色 -->
     <div v-if="pendingWildId" class="color-picker" @click.self="pendingWildId = null">
       <div class="swatches">
         <button
@@ -370,7 +375,7 @@ function faceOf(card: Card): string {
 
 .hud {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 16px;
 }
 
@@ -388,25 +393,24 @@ function faceOf(card: Card): string {
 .opponents {
   display: flex;
   flex: 1;
-  gap: clamp(12px, 4vmin, 44px);
+  gap: clamp(16px, 5vmin, 60px);
   justify-content: center;
 }
 
 .seat {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 4px;
-  padding: 6px 14px;
-  border-radius: 18px;
-  opacity: 0.4;
+  gap: 10px;
+  padding: 8px 14px;
+  border-radius: 20px;
+  opacity: 0.45;
   transition: all 180ms;
 }
 
 .seat.active {
   background: var(--bg-card);
   opacity: 1;
-  transform: scale(1.1);
+  transform: scale(1.06);
   box-shadow: var(--shadow);
 }
 
@@ -416,108 +420,119 @@ function faceOf(card: Card): string {
 }
 
 .seat-avatar {
-  font-size: clamp(26px, 4.4vmin, 40px);
+  font-size: clamp(28px, 4.6vmin, 44px);
   line-height: 1;
   font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
 }
 
-/* 对手手牌数量用小牌背表示，不用数字 */
-.counts {
+/* 对手手牌：铺开的小牌背 + 一个数字，一眼看出还剩多少 */
+.fan {
   display: flex;
-  flex-wrap: wrap;
-  gap: 2px;
-  justify-content: center;
-  max-width: 90px;
+  align-items: center;
 }
 
-.mini {
-  width: 7px;
-  height: 11px;
-  background: var(--accent-4);
-  border-radius: 2px;
+.fan-card {
+  display: block;
+  width: clamp(18px, 2.6vmin, 26px);
+  aspect-ratio: 2 / 3;
+  container-type: inline-size;
+}
+
+.fan-card + .fan-card {
+  margin-left: -46%;
+}
+
+.fan-count {
+  margin-left: 10px;
+  font-size: clamp(19px, 2.9vmin, 28px);
+  font-weight: 900;
+  color: var(--ink);
 }
 
 .table {
   display: flex;
   flex: 1;
-  gap: clamp(14px, 4vmin, 48px);
+  gap: clamp(20px, 6vmin, 70px);
   align-items: center;
   justify-content: center;
   min-height: 0;
 }
 
-/* 当前颜色单独用一个色球表示：万能牌改色后，顶牌颜色就不作数了 */
-.color-orb {
-  width: clamp(44px, 8vmin, 78px);
-  height: clamp(44px, 8vmin, 78px);
+/* 摸牌堆做成一摞：三层错开，看得出厚度 */
+.pile {
+  position: relative;
+  width: clamp(80px, 16vmin, 150px);
+  aspect-ratio: 2 / 3;
+  opacity: 0.6;
+  transition: opacity 200ms, transform 200ms;
+}
+
+.pile.ready {
+  opacity: 1;
+  animation: pile-breathe 1.6s ease-in-out infinite;
+}
+
+.pile-layer {
+  position: absolute;
+  inset: 0;
+  container-type: inline-size;
+}
+
+.pile-layer.l3 {
+  transform: translate(7%, 7%) rotate(5deg);
+}
+
+.pile-layer.l2 {
+  transform: translate(3.5%, 3.5%) rotate(2.5deg);
+}
+
+/* 轮到你时牌堆上冒一个大加号，说明"可以从这里拿一张" */
+.pile-hint {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 44%;
+  aspect-ratio: 1;
+  font-size: clamp(26px, 5vmin, 48px);
+  font-weight: 900;
+  color: var(--ink);
+  background: #fffdf7;
   border-radius: 50%;
   box-shadow: var(--shadow);
+  transform: translate(-50%, -50%);
+}
+
+/* 弃牌堆外面一圈就是当前颜色 */
+.discard {
+  padding: clamp(10px, 2vmin, 20px);
+  /* 外面再包一圈白，否则当前颜色和牌本身同色时这一圈等于看不见 */
+  border: 4px solid #fffdf7;
+  border-radius: clamp(16px, 3vmin, 30px);
+  box-shadow: var(--shadow-lg);
   transition: background 260ms;
 }
 
-.card {
-  position: relative;
-  display: grid;
-  place-items: center;
+.discard-card {
+  width: clamp(88px, 18vmin, 168px);
   aspect-ratio: 2 / 3;
-  background: var(--c, var(--ink));
-  border: 4px solid #fffdf7;
-  border-radius: clamp(8px, 1.6vmin, 16px);
-  box-shadow: var(--shadow);
-}
-
-.card .face {
-  font-size: clamp(24px, 5.6vmin, 58px);
-  font-weight: 900;
-  color: #fff;
-  text-shadow: 0 2px 3px rgba(0, 0, 0, 0.28);
-}
-
-.top {
-  width: clamp(92px, 19vmin, 175px);
-}
-
-.rainbow {
-  position: absolute;
-  inset: 12%;
-  background: conic-gradient(#ef476f, #ffc93c, #06d6a0, #4cc9f0, #ef476f);
-  border-radius: 50%;
-  opacity: 0.55;
-}
-
-.draw-pile {
-  width: clamp(82px, 17vmin, 155px);
-  aspect-ratio: 2 / 3;
-  opacity: 0.55;
-}
-
-.draw-pile.ready {
-  opacity: 1;
-}
-
-.pile-back {
-  display: block;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(145deg, var(--accent-4), #2f9ed1);
-  border: 4px solid #fffdf7;
-  border-radius: clamp(8px, 1.6vmin, 16px);
-  box-shadow: var(--shadow);
+  container-type: inline-size;
 }
 
 .hand-bar {
-  padding: clamp(6px, 1.4vmin, 14px) 0;
+  padding: clamp(8px, 1.6vmin, 16px) 0;
   border-radius: var(--radius);
   transition: background 200ms;
 }
 
-/* 轮到孩子时整条手牌区亮起来 */
 .hand-bar.mine {
-  background: rgba(6, 214, 160, 0.14);
+  background: rgba(0, 184, 132, 0.16);
 }
 
 .hand-bar.uno {
-  background: rgba(255, 201, 60, 0.35);
+  background: rgba(249, 194, 46, 0.4);
 }
 
 .hand {
@@ -527,19 +542,36 @@ function faceOf(card: Card): string {
   justify-content: center;
 }
 
-.hand-card {
+.hand-slot {
   width: clamp(62px, 11.5vmin, 112px);
+  aspect-ratio: 2 / 3;
+  container-type: inline-size;
   transition: transform 160ms, filter 160ms;
 }
 
-/* 新手辅助：能出的牌抬起来放大，不能出的灰掉且点不动 */
-.hand-card.playable {
-  transform: translateY(-10px) scale(1.06);
+/*
+ * 不能出的牌【保留颜色】，只是不抬起来、稍微压暗。
+ * 第一版用灰度滤镜抹掉了颜色，结果出万能牌要选颜色时根本看不出自己手里有什么色 ——
+ * 颜色是这个游戏最核心的信息，任何时候都不能抹掉。
+ */
+.hand-slot.playable {
+  transform: translateY(-14px);
+  filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.95));
 }
 
-.hand-card.dimmed {
-  filter: grayscale(0.85) brightness(0.9);
-  opacity: 0.55;
+/* 不抬起来就是唯一的区别 —— 绝不压暗、绝不去色 */
+.hand-slot.resting {
+  opacity: 0.94;
+}
+
+.hand-slot.shaking {
+  animation: card-shake 380ms ease-in-out;
+}
+
+@keyframes card-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-7px) rotate(-3deg); }
+  75% { transform: translateX(7px) rotate(3deg); }
 }
 
 .color-picker {
@@ -568,10 +600,24 @@ function faceOf(card: Card): string {
   box-shadow: var(--shadow);
 }
 
+@keyframes pile-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .hand-card,
-  .color-orb {
+  .hand-slot,
+  .discard,
+  .pile {
     transition: none;
+  }
+  .pile.ready {
+    animation: none;
   }
 }
 </style>
