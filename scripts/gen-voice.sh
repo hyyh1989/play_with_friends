@@ -1,67 +1,99 @@
 #!/usr/bin/env bash
-# 生成中文语音文件（macOS 内置 TTS，不联网、不花钱）。
+# 生成语音文件（macOS 内置 TTS，不联网、不花钱）。
 #
-#   ./scripts/gen-voice.sh
+#   ./scripts/gen-voice.sh              # 全部语言
+#   ./scripts/gen-voice.sh zh-CN        # 只生成某一种
 #
-# 产物进 public/audio/voice/zh-CN/，直接提交进仓库 —— 运行时不做 TTS，
+# 产物进 public/audio/voice/<locale>/，直接提交进仓库 —— 运行时不做 TTS，
 # 因为要零延迟、离线可用、音色可控（见 docs/DESIGN.md 4.4）。
 #
-# 换音色：VOICE=Flo ./scripts/gen-voice.sh
-# 这台 Mac 上默认只装了 Tingting，其他中文嗓音要先在
-# 「系统设置 → 辅助功能 → 朗读内容 → 系统嗓音」里下载。
+# 缺哪个语言的文件，界面会静默跳过（不会崩），所以可以只做一部分。
+#
+# 换音色：VOICE_ZH=Flo ./scripts/gen-voice.sh zh-CN
+# 这台机器上装了哪些嗓音用 `say -v '?'` 看；列出来不代表能用 ——
+# 没下载的嗓音会生成 0 秒的空文件，脚本会检查并跳过。
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-VOICE="${VOICE:-Tingting}"
-OUT="public/audio/voice/zh-CN"
-mkdir -p "$OUT"
+VOICE_ZH="${VOICE_ZH:-Tingting}"
+VOICE_EN="${VOICE_EN:-Samantha}"
+VOICE_KO="${VOICE_KO:-Yuna}"
 
-# 探测句要足够长：太短的话时长不足一秒，会被下面的判断误杀
-say -v "$VOICE" -o /tmp/_probe.aiff "这是一句用来测试发声是否正常的话" 2>/dev/null
-DUR=$(afinfo /tmp/_probe.aiff | awk '/estimated duration/{print ($3 > 0.5) ? 1 : 0}')
-if [ "${DUR:-0}" -ne 1 ]; then
-  echo "⚠️  嗓音 $VOICE 没有实际发声（可能没下载）。先去系统设置里下载，或换一个。"
-  exit 1
-fi
-
-gen() {
-  local key="$1" text="$2"
-  say -v "$VOICE" -o "/tmp/_v.aiff" "$text"
-  # 单声道 22.05kHz：语音够用，文件比原始小四倍
-  afconvert -f WAVE -d LEI16@22050 -c 1 "/tmp/_v.aiff" "$OUT/$key.wav"
-  printf '  %-22s %6s  %s\n' "$key.wav" "$(du -h "$OUT/$key.wav" | cut -f1)" "$text"
+check_voice() {
+  local v="$1"
+  say -v "$v" -o /tmp/_probe.aiff "This is a probe sentence long enough to measure" 2>/dev/null || return 1
+  local ok
+  ok=$(afinfo /tmp/_probe.aiff | awk '/estimated duration/{print ($3 > 0.5) ? 1 : 0}')
+  [ "${ok:-0}" -eq 1 ]
 }
 
-echo "嗓音：$VOICE"
-echo "首页："
-gen "game.memory"   "翻牌配对"
-gen "game.snakes"   "蛇梯棋"
-gen "game.uno"      "优诺牌"
+gen() {
+  local voice="$1" out="$2" key="$3" text="$4"
+  [ -n "$text" ] || return 0
+  say -v "$voice" -o "/tmp/_v.aiff" "$text"
+  # 单声道 22.05kHz：语音够用，文件比原始小四倍
+  afconvert -f WAVE -d LEI16@22050 -c 1 "/tmp/_v.aiff" "$out/$key.wav"
+  printf '  %-18s %6s  %s\n' "$key" "$(du -h "$out/$key.wav" | cut -f1)" "$text"
+}
 
-echo "教学 · 开场："
-gen "uno.ask"       "要我教你玩吗？"
-gen "uno.yourTurn"  "轮到你啦。"
+# key|中文|English|한국어
+#
+# ⚠️ 英文和韩文是 AI 写的，**没有母语者校对过** —— 尤其是"对 5 岁孩子说话"的语气。
+# 觉得别扭就改这里的文本重跑，不用动代码。
+LINES='
+game.memory|翻牌配对|Memory Match|카드 짝 맞추기
+game.snakes|蛇梯棋|Snakes and Ladders|뱀과 사다리
+game.uno|优诺牌|Uno|우노
+uno.ask|要我教你玩吗？|Shall I show you how to play?|내가 방법을 알려 줄까?
+uno.yourTurn|轮到你啦。|It is your turn.|이제 네 차례야.
+uno.match.red|这张也是红色的，和中间的一样，点它就可以出。|This one is red too, just like the middle card. Tap it to play it.|이 카드도 빨간색이야. 가운데 카드랑 같아. 눌러서 내 보자.
+uno.match.yellow|这张也是黄色的，和中间的一样，点它就可以出。|This one is yellow too, just like the middle card. Tap it to play it.|이 카드도 노란색이야. 가운데 카드랑 같아. 눌러서 내 보자.
+uno.match.green|这张也是绿色的，和中间的一样，点它就可以出。|This one is green too, just like the middle card. Tap it to play it.|이 카드도 초록색이야. 가운데 카드랑 같아. 눌러서 내 보자.
+uno.match.blue|这张也是蓝色的，和中间的一样，点它就可以出。|This one is blue too, just like the middle card. Tap it to play it.|이 카드도 파란색이야. 가운데 카드랑 같아. 눌러서 내 보자.
+uno.matchNumber|看，数字一样，颜色不一样也可以出哦。|Look, the number is the same. You can play it even if the colour is different.|봐, 숫자가 같지? 색이 달라도 낼 수 있어.
+uno.mustDraw|都出不了？那就从这里摸一张。|Nothing you can play? Then take one card from here.|낼 카드가 없어? 그럼 여기서 한 장 가져와.
+uno.wildColor|这张牌可以变成任何颜色。你想要哪个颜色？|This card can become any colour. Which colour do you want?|이 카드는 아무 색이나 될 수 있어. 무슨 색으로 할까?
+uno.skip|出了这张，下一个人就轮空啦。|Play this one and the next player is skipped.|이걸 내면 다음 사람은 건너뛰어.
+uno.reverse|方向反过来了。|Now we go the other way round.|방향이 반대로 바뀌었어.
+uno.draw2|下一个人要摸两张牌。|The next player takes two cards.|다음 사람은 두 장 가져가.
+uno.tryThis|点这张试试看。|Try tapping this one.|이걸 한번 눌러 볼까?
+uno.wellDone|真棒！|Well done!|잘했어!
+uno.uno|只剩一张啦，优诺！|Only one card left. Uno!|이제 한 장 남았어. 우노!
+'
 
-echo "教学 · 出牌规则："
-gen "uno.match.red"    "这张也是红色的，和中间的一样，点它就可以出。"
-gen "uno.match.yellow" "这张也是黄色的，和中间的一样，点它就可以出。"
-gen "uno.match.green"  "这张也是绿色的，和中间的一样，点它就可以出。"
-gen "uno.match.blue"   "这张也是蓝色的，和中间的一样，点它就可以出。"
-gen "uno.matchNumber"  "看，数字一样，颜色不一样也可以出哦。"
+run_locale() {
+  local locale="$1" voice="$2" col="$3"
+  echo
+  echo "── $locale （嗓音 $voice）──"
+  if ! check_voice "$voice"; then
+    echo "  ⚠️  嗓音 $voice 没有实际发声（多半是没下载）。"
+    echo "     去「系统设置 → 辅助功能 → 朗读内容 → 系统嗓音」下载，或换一个。"
+    echo "     跳过 $locale —— 缺语音文件界面会静默跳过，不影响游戏。"
+    return 0
+  fi
+  local out="public/audio/voice/$locale"
+  mkdir -p "$out"
+  local key zh en ko text
+  while IFS='|' read -r key zh en ko; do
+    [ -n "$key" ] || continue
+    case "$col" in
+      zh) text="$zh" ;;
+      en) text="$en" ;;
+      ko) text="$ko" ;;
+    esac
+    gen "$voice" "$out" "$key" "$text"
+  done <<< "$LINES"
+  echo "  → $(ls "$out" | wc -l | tr -d ' ') 个文件，$(du -sh "$out" | cut -f1)"
+}
 
-echo "教学 · 摸牌："
-gen "uno.mustDraw"     "都出不了？那就从这里摸一张。"
-
-echo "教学 · 功能牌："
-gen "uno.wildColor"    "这张牌可以变成任何颜色。你想要哪个颜色？"
-gen "uno.skip"         "出了这张，下一个人就轮空啦。"
-gen "uno.reverse"      "方向反过来了。"
-gen "uno.draw2"        "下一个人要摸两张牌。"
-
-echo "教学 · 鼓励："
-gen "uno.tryThis"      "点这张试试看。"
-gen "uno.wellDone"     "真棒！"
-gen "uno.uno"          "只剩一张啦，优诺！"
-
-echo
-echo "共 $(ls "$OUT" | wc -l | tr -d ' ') 个文件，$(du -sh "$OUT" | cut -f1)"
+case "${1:-all}" in
+  zh-CN) run_locale "zh-CN" "$VOICE_ZH" zh ;;
+  en)    run_locale "en"    "$VOICE_EN" en ;;
+  ko)    run_locale "ko"    "$VOICE_KO" ko ;;
+  all)
+    run_locale "zh-CN" "$VOICE_ZH" zh
+    run_locale "en"    "$VOICE_EN" en
+    run_locale "ko"    "$VOICE_KO" ko
+    ;;
+  *) echo "用法：$0 [zh-CN|en|ko|all]"; exit 1 ;;
+esac

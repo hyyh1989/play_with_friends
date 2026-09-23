@@ -45,6 +45,21 @@ export default defineConfig({
       workbox: {
         // 音频也要进缓存，否则断网后没有音效
         globPatterns: ['**/*.{js,css,html,png,svg,wav}'],
+        /*
+         * 但只预缓存中文语音。三种语言全塞进去要 5.8MB，而每个用户只用其中一种 ——
+         * 等于让所有人替另外两种语言付流量。英韩改成"用到才下载、下载后缓存"。
+         */
+        globIgnores: ['**/audio/voice/en/**', '**/audio/voice/ko/**'],
+        runtimeCaching: [
+          {
+            urlPattern: /audio\/voice\/.*\.wav$/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'voice',
+              expiration: { maxEntries: 80 },
+            },
+          },
+        ],
       },
     }),
   ],
