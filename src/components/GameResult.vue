@@ -62,13 +62,19 @@ function isWinner(player: PlayerRef): boolean {
 .result {
   position: fixed;
   inset: 0;
-  z-index: 10;
+  /* 要压过游戏里可能还在飞的牌（UNO 的飞牌是 z-index 20） */
+  z-index: 30;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: clamp(16px, 4vmin, 40px);
-  background: rgba(255, 248, 231, 0.96);
+  /*
+   * 必须【完全】不透明。原来是 0.96，翻牌配对和蛇梯棋的画面淡，看不出来；
+   * 到了 UNO 就露馅了 —— 大块饱和色的牌会从这 4% 里透出来，
+   * 结算页背景上能看见最后那张牌。
+   */
+  background: var(--bg);
   animation: fade 240ms ease-out;
 }
 
