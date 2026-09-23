@@ -25,8 +25,8 @@ import { chooseAiAction } from './ai'
 
 const AI_THINK_MS = 900
 const WIN_CELEBRATE_MS = 1800
-/** 对手手牌最多铺开几张，再多就折叠 */
-const FAN_MAX = 7
+/** 一张牌飞过去要多久 */
+const FLY_MS = 420
 
 const router = useRouter()
 const settings = useSettingsStore()
@@ -41,6 +41,54 @@ const unoFlash = ref<string | null>(null)
 /** 点了出不了的牌，抖一下给反馈 */
 const shakingId = ref<string | null>(null)
 
+/*
+ * 飞牌动画。牌从哪来到哪去，孩子才看得懂"谁出了牌""我抽了一张"。
+ * 做法：拿两端元素的实际位置，在最上层放一张牌从 A 补间到 B。
+ * 牌桌上的牌其实已经更新了，飞过去的那张正好落在同一张牌上，所以看起来是连贯的。
+ */
+const pileEl = ref<HTMLElement | null>(null)
+const discardEl = ref<HTMLElement | null>(null)
+const handEl = ref<HTMLElement | null>(null)
+const seatEls = new Map<string, HTMLElement>()
+function setSeatRef(id: string, el: unknown) {
+  if (el instanceof HTMLElement) seatEls.set(id, el)
+  else seatEls.delete(id)
+}
+
+const flying = shallowRef<{ card?: Card; back?: boolean } | null>(null)
+const flyStyle = ref<Record<string, string>>({})
+/** 飞牌用自己的定时器：clearTimers 每次状态变化都会跑，会把它一起清掉 */
+let flyTimer: number | undefined
+
+function anchorOf(playerId: string): HTMLElement | null {
+  return playerId === 'child' ? handEl.value : (seatEls.get(playerId) ?? null)
+}
+
+function flyCard(from: HTMLElement | null, to: HTMLElement | null, payload: { card?: Card; back?: boolean }) {
+  if (!from || !to) return
+  const a = from.getBoundingClientRect()
+  const b = to.getBoundingClientRect()
+  const width = Math.max(56, Math.min(b.width || 90, 110))
+  const place = (r: DOMRect) => ({
+    left: `${r.left + r.width / 2 - width / 2}px`,
+    top: `${r.top + r.height / 2 - (width * 1.5) / 2}px`,
+    width: `${width}px`,
+  })
+  flying.value = payload
+  flyStyle.value = { ...place(a), transition: 'none' }
+  // 必须等两帧：元素这一帧才刚创建，同一帧里改 transition 浏览器不会触发过渡
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      flyStyle.value = {
+        ...place(b),
+        transition: `left ${FLY_MS}ms ease-in-out, top ${FLY_MS}ms ease-in-out`,
+      }
+    })
+  })
+  clearTimeout(flyTimer)
+  flyTimer = window.setTimeout(() => (flying.value = null), FLY_MS + 80)
+}
+
 let timers: number[] = []
 function later(fn: () => void, ms: number) {
   timers.push(window.setTimeout(fn, ms))
@@ -49,6 +97,8 @@ function clearTimers() {
   timers.forEach(clearTimeout)
   timers = []
 }
+
+onUnmounted(() => clearTimeout(flyTimer))
 onUnmounted(clearTimers)
 
 const finished = computed(() => (state.value ? isFinished(state.value) : false))
@@ -76,10 +126,6 @@ function playable(card: Card): boolean {
 
 function handCount(playerId: string): number {
   return state.value?.hands[playerId]?.length ?? 0
-}
-
-function fanOf(playerId: string): number {
-  return Math.min(FAN_MAX, handCount(playerId))
 }
 
 function start() {
@@ -156,8 +202,16 @@ watch(
       unoFlash.value = null
     }
 
-    if (current.lastEvent?.type === 'play') playSfx('flip')
-    if (current.lastEvent?.type === 'draw') playSfx('tap')
+    const event = current.lastEvent
+    if (event?.type === 'play') {
+      playSfx('flip')
+      flyCard(anchorOf(event.playerId), discardEl.value, { card: event.card })
+    }
+    if (event?.type === 'draw') {
+      playSfx('tap')
+      const drawn = event.playerId === 'child' ? current.hands.child?.at(-1) : undefined
+      flyCard(pileEl.value, anchorOf(event.playerId), drawn ? { card: drawn } : { back: true })
+    }
 
     if (isFinished(current)) {
       playSfx('celebrate')
@@ -219,12 +273,10 @@ function goHome() {
           :class="{ active: player.id === activeId, uno: unoFlash === player.id }"
         >
           <span class="seat-avatar">{{ player.avatar }}</span>
-          <!-- 对手手里有多少牌：铺开的牌背，看得见厚度 -->
-          <div class="fan">
-            <span v-for="n in fanOf(player.id)" :key="n" class="fan-card">
-              <UnoCard back />
-            </span>
-            <span class="fan-count">{{ handCount(player.id) }}</span>
+          <!-- 对手手牌：一个牌堆加一个数字就够了，铺开一排牌多了会很乱 -->
+          <div class="opp-hand" :ref="(el) => setSeatRef(player.id, el as HTMLElement)">
+            <span class="opp-card"><UnoCard back /></span>
+            <span class="opp-count">{{ handCount(player.id) }}</span>
           </div>
         </div>
       </div>
@@ -233,6 +285,7 @@ function goHome() {
     <div class="table">
       <!-- 摸牌堆：叠起来才看得出是一摞可以抽的牌 -->
       <button
+        ref="pileEl"
         class="pile pressable"
         :class="{ ready: myTurn }"
         :disabled="!myTurn"
@@ -250,13 +303,13 @@ function goHome() {
         class="discard"
         :style="{ background: COLOR_HEX[state?.activeColor ?? 'red'] }"
       >
-        <div class="discard-card">
+        <div ref="discardEl" class="discard-card">
           <UnoCard v-if="top" :card="top" />
         </div>
       </div>
     </div>
 
-    <footer class="hand-bar" :class="{ mine: myTurn, uno: unoFlash === 'child' }">
+    <footer ref="handEl" class="hand-bar" :class="{ mine: myTurn, uno: unoFlash === 'child' }">
       <div class="hand">
         <button
           v-for="card in myHand"
@@ -273,6 +326,10 @@ function goHome() {
         </button>
       </div>
     </footer>
+
+    <div v-if="flying" class="flying" :style="flyStyle">
+      <UnoCard :card="flying.card" :back="flying.back" />
+    </div>
 
     <div v-if="pendingWildId" class="color-picker" @click.self="pendingWildId = null">
       <div class="swatches">
@@ -425,28 +482,34 @@ function goHome() {
   font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
 }
 
-/* 对手手牌：铺开的小牌背 + 一个数字，一眼看出还剩多少 */
-.fan {
+/* 对手手牌：一个牌堆 + 一个数字 */
+.opp-hand {
   display: flex;
   align-items: center;
+  gap: 8px;
 }
 
-.fan-card {
+.opp-card {
   display: block;
-  width: clamp(18px, 2.6vmin, 26px);
+  width: clamp(30px, 4.6vmin, 46px);
   aspect-ratio: 2 / 3;
   container-type: inline-size;
 }
 
-.fan-card + .fan-card {
-  margin-left: -46%;
-}
-
-.fan-count {
-  margin-left: 10px;
-  font-size: clamp(19px, 2.9vmin, 28px);
+.opp-count {
+  font-size: clamp(22px, 3.4vmin, 34px);
   font-weight: 900;
   color: var(--ink);
+}
+
+/* 飞行中的牌，压在所有东西上面 */
+.flying {
+  position: fixed;
+  z-index: 20;
+  aspect-ratio: 2 / 3;
+  container-type: inline-size;
+  pointer-events: none;
+  filter: drop-shadow(0 6px 10px rgba(61, 44, 30, 0.35));
 }
 
 .table {
