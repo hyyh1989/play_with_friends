@@ -124,7 +124,9 @@ function goHome() {
         :aria-label="$t('memory.modeSolo')"
         @click="mode = 'solo'"
       >
-        <span class="faces"><span class="face">{{ settings.avatar }}</span></span>
+        <span class="mode-avatars">
+          <span class="mode-avatar">{{ settings.avatar }}</span>
+        </span>
       </button>
       <button
         class="choice pressable"
@@ -132,9 +134,10 @@ function goHome() {
         :aria-label="$t('memory.modeAi')"
         @click="mode = 'ai'"
       >
-        <span class="faces">
-          <span class="face">{{ settings.avatar }}</span>
-          <span class="face">{{ aiAvatar }}</span>
+        <span class="mode-avatars">
+          <span class="mode-avatar">{{ settings.avatar }}</span>
+          <span class="vs">VS</span>
+          <span class="mode-avatar">{{ aiAvatar }}</span>
         </span>
       </button>
     </div>
@@ -149,7 +152,7 @@ function goHome() {
         @click="pairs = option"
       >
         <!-- 用小方块画出牌面大小，一眼看懂是几张牌 -->
-        <span class="preview" :style="{ gridTemplateRows: `repeat(${(option * 2) / 4}, 1fr)` }">
+        <span class="preview">
           <span v-for="n in option * 2" :key="n" class="tile" />
         </span>
       </button>
@@ -161,20 +164,18 @@ function goHome() {
   <!-- 对局 -->
   <div v-else class="game safe-area">
     <header class="hud">
-      <button class="back pressable" :aria-label="$t('common.back')" @click="goHome">←</button>
+      <button class="exit-btn pressable" :aria-label="$t('common.back')" @click="goHome">←</button>
 
       <div class="players">
-        <div
-          v-for="player in state?.players ?? []"
-          :key="player.id"
-          class="player"
-          :class="{ active: player.id === activeId }"
-        >
-          <span class="avatar">{{ player.avatar }}</span>
-          <div class="stars">
-            <span v-for="n in state?.scores[player.id] ?? 0" :key="n" class="star">⭐</span>
+        <template v-for="(player, index) in state?.players ?? []" :key="player.id">
+          <span v-if="index > 0" class="vs">VS</span>
+          <div class="player" :class="{ active: player.id === activeId }">
+            <span class="avatar">{{ player.avatar }}</span>
+            <div class="stars">
+              <span v-for="n in state?.scores[player.id] ?? 0" :key="n" class="star">⭐</span>
+            </div>
           </div>
-        </div>
+        </template>
       </div>
     </header>
 
@@ -194,8 +195,8 @@ function goHome() {
           @click="tapCard(card.id)"
         >
           <span class="inner">
-            <span class="side back" />
-            <span class="side front">{{ card.symbol }}</span>
+            <span class="card-side is-back" />
+            <span class="card-side is-front">{{ card.symbol }}</span>
           </span>
         </button>
       </div>
@@ -244,26 +245,45 @@ function goHome() {
   border-color: var(--accent-2);
 }
 
-.faces {
+.mode-avatars {
   display: flex;
-  gap: 4px;
+  gap: 8px;
+  align-items: center;
 }
 
-.face {
+.mode-avatar {
   font-size: clamp(30px, 5vmin, 46px);
   line-height: 1;
   font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
 }
 
+/* 两个头像之间的 VS：一眼看出这是"你跟它比" */
+.vs {
+  align-self: center;
+  padding: 3px 9px;
+  font-size: clamp(12px, 1.8vmin, 16px);
+  font-weight: 900;
+  font-style: italic;
+  color: #fff;
+  background: var(--accent-3);
+  border-radius: 999px;
+}
+
+/*
+ * 方块尺寸固定、整块随牌数长高 —— 三个选项必须一眼能分出大中小。
+ * 早先把预览框定成同样大小，结果 4/6/8 对牌画出来几乎一模一样，
+ * 孩子根本没法靠看来选。
+ */
 .preview {
+  --tile: clamp(10px, 1.8vmin, 18px);
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 3px;
-  width: clamp(56px, 9vmin, 84px);
-  aspect-ratio: 4 / 3;
+  grid-template-columns: repeat(4, var(--tile));
+  gap: 4px;
 }
 
 .tile {
+  width: var(--tile);
+  height: var(--tile);
   background: var(--accent);
   border-radius: 3px;
 }
@@ -292,7 +312,7 @@ function goHome() {
   gap: 16px;
 }
 
-.back {
+.exit-btn {
   display: grid;
   place-items: center;
   width: 56px;
@@ -369,6 +389,9 @@ function goHome() {
   perspective: 700px;
   min-width: 0;
   min-height: 0;
+  /* 让图案能按【卡片】大小缩放，而不是按屏幕 —— 4 对牌时卡片很大，
+     跟着屏幕算出来的字号会显得图案缩在中间一小团 */
+  container-type: size;
 }
 
 .inner {
@@ -384,7 +407,12 @@ function goHome() {
   transform: rotateY(180deg);
 }
 
-.side {
+/*
+ * 正反两面必须严格同尺寸（inset:0），翻牌只是转过来、不改变大小。
+ * 注意别再用 .back / .front 这种泛名字 —— scoped 样式只隔离组件之间，
+ * 同一个组件里 HUD 的返回按钮曾经也叫 .back，把卡背压成了 56×56 的小圆。
+ */
+.card-side {
   position: absolute;
   inset: 0;
   display: grid;
@@ -394,13 +422,15 @@ function goHome() {
   -webkit-backface-visibility: hidden;
 }
 
-.back {
+.is-back {
   background: linear-gradient(145deg, var(--accent-4), #2f9ed1);
   box-shadow: var(--shadow);
 }
 
-.front {
+.is-front {
+  /* 第一条是不支持容器查询单位时的兜底，第二条支持时生效 */
   font-size: clamp(26px, 7vmin, 64px);
+  font-size: 48cqmin;
   line-height: 1;
   font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
   background: var(--bg-card);
@@ -412,7 +442,7 @@ function goHome() {
   animation: found 420ms ease-out;
 }
 
-.card.matched .front {
+.card.matched .is-front {
   background: #e8fff6;
 }
 
