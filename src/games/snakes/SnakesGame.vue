@@ -90,28 +90,17 @@ const center = (square: number) => {
 }
 
 /**
- * 每行走到头要折回上一行，这是蛇形棋盘最容易让人看不懂的地方。
- * 在折返处画一段**半圆的掉头弧**（比直箭头更像"拐弯"），带箭头指向去处。
+ * 一条贯穿 50 格的轨道，**画在格子下面**：格子之间留着缝，轨道从缝里露出来，
+ * 把所有格子串成一条连续的路。
  *
- * （原本画过一条贯穿 50 格的折线，实测像一团方框、反而更乱，已去掉。
- * 让路径可读靠的是格子深浅交替 + 这几段掉头弧 + 起点的方向箭头。）
+ * 这是第四版改法。前三版都想在拐角上做文章（细线 → 直箭头 → 半圆弧），
+ * 但箭头总和弧线挤在一起；而一旦整条路是连着的，"走到头往上拐"就不言自明，
+ * 拐角根本不需要额外标记 —— 只有起点还需要一个箭头说明往哪边走。
  */
-const turnArcs = computed(() =>
-  [COLS, COLS * 2, COLS * 3, COLS * 4].map((square) => {
-    const a = center(square)
-    const b = center(square + 1)
-    // 弧要朝棋盘外侧鼓出去：右边那一行往右鼓，左边那一行往左鼓。
-    // 注意 SVG 的 y 轴向下，sweep=1（顺时针）从下往上是绕【左】边走 ——
-    // 所以靠右的要用 sweep=0，直觉上正好相反，写反了弧就朝里扣。
-    const onRight = cellPosition(square).col === COLS - 1
-    const sweep = onRight ? 0 : 1
-    const r = 0.46
-    return {
-      d: `M ${a.x} ${a.y - 0.12} A ${r} ${r} 0 0 ${sweep} ${b.x} ${b.y + 0.14}`,
-      // 对称的 V 形箭头，朝上 —— 指出"从这里拐上去"
-      head: `${b.x - 0.15},${b.y + 0.34} ${b.x},${b.y + 0.14} ${b.x + 0.15},${b.y + 0.34}`,
-    }
-  }),
+const trackPoints = computed(() =>
+  Array.from({ length: BOARD_SIZE }, (_, i) => center(i + 1))
+    .map((p) => `${p.x},${p.y}`)
+    .join(' '),
 )
 
 /** 梯子画成真的梯子：两根边梁 + 若干横档 */
@@ -362,6 +351,7 @@ const FACES = [
 
 <template>
   <div v-if="phase === 'setup'" class="setup safe-area">
+    <button class="corner-back pressable" :aria-label="$t('common.back')" @click="goHome">←</button>
     <div class="choices">
       <button
         v-for="count in [2, 3, 4]"
@@ -386,6 +376,11 @@ const FACES = [
       <button class="exit-btn pressable" :aria-label="$t('common.back')" @click="goHome">←</button>
 
       <div class="board">
+        <!-- 轨道画在格子下面，从格子之间的缝里露出来 -->
+        <svg class="track-layer" :viewBox="`0 0 ${COLS} ${ROWS}`">
+          <polyline class="track" :points="trackPoints" />
+        </svg>
+
         <div
           v-for="cell in cells"
           :key="cell.square"
@@ -414,12 +409,6 @@ const FACES = [
         </div>
 
         <svg class="overlay" :viewBox="`0 0 ${COLS} ${ROWS}`">
-          <!-- 掉头弧：走到行尾从这里拐上去 -->
-          <g v-for="(a, i) in turnArcs" :key="`T${i}`" class="turn">
-            <path :d="a.d" />
-            <polyline :points="a.head" />
-          </g>
-
 
           <!-- 梯子：两根边梁加横档 -->
           <g v-for="(l, i) in ladders" :key="`L${i}`" class="ladder-g">
@@ -503,12 +492,28 @@ const FACES = [
 
 <style scoped>
 .setup {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: clamp(16px, 4vmin, 40px);
   height: 100%;
+}
+
+/* 选项页也要能退出去：不然进错游戏就只能靠系统手势 */
+.corner-back {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  font-size: 26px;
+  background: var(--bg-card);
+  border-radius: 50%;
+  box-shadow: var(--shadow);
 }
 
 .choices {
@@ -613,7 +618,8 @@ const FACES = [
 .cell::before {
   content: '';
   position: absolute;
-  inset: 7%;
+  /* 缝要留够，否则下面的轨道露不出来 */
+  inset: 11%;
   background: #fffdf4;
   border-radius: 24%;
   box-shadow: 0 2px 0 rgba(61, 44, 30, 0.1);
@@ -675,13 +681,21 @@ const FACES = [
   pointer-events: none;
 }
 
-.turn path,
-.turn polyline {
+.track-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.track {
   fill: none;
-  stroke: rgba(61, 44, 30, 0.58);
-  stroke-width: 0.105;
-  stroke-linecap: round;
+  stroke: #c9a173;
+  stroke-width: 0.52;
   stroke-linejoin: round;
+  stroke-linecap: round;
+  opacity: 0.85;
 }
 
 .rail {

@@ -117,6 +117,7 @@ function goHome() {
 <template>
   <!-- 开局设置：全部用图形表达，不依赖认字 -->
   <div v-if="phase === 'setup'" class="setup safe-area">
+    <button class="corner-back pressable" :aria-label="$t('common.back')" @click="goHome">←</button>
     <div class="choices">
       <button
         class="choice pressable"
@@ -216,12 +217,28 @@ function goHome() {
 
 <style scoped>
 .setup {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: clamp(16px, 4vmin, 40px);
   height: 100%;
+}
+
+/* 选项页也要能退出去：不然进错游戏就只能靠系统手势 */
+.corner-back {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  font-size: 26px;
+  background: var(--bg-card);
+  border-radius: 50%;
+  box-shadow: var(--shadow);
 }
 
 .choices {
