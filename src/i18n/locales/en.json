@@ -1,0 +1,53 @@
+{
+  "app": {
+    "title": "Play Together"
+  },
+  "home": {
+    "tapToStart": "Tap to start",
+    "chooseGame": "Pick a game"
+  },
+  "games": {
+    "memory": { "name": "Memory Match" },
+    "snakes": { "name": "Snakes & Ladders" },
+    "uno": { "name": "UNO" }
+  },
+  "common": {
+    "soon": "Coming soon",
+    "playAgain": "Play again",
+    "otherGame": "Another game",
+    "back": "Back",
+    "close": "Close",
+    "yourTurn": "Your turn"
+  },
+  "difficulty": {
+    "label": "Difficulty",
+    "easy": "Easy",
+    "normal": "Normal",
+    "serious": "Serious"
+  },
+  "avatar": {
+    "choose": "Pick an avatar"
+  },
+  "parent": {
+    "title": "Parent settings",
+    "hint": "Press and hold 3 seconds",
+    "volume": "Volume",
+    "assist": "Beginner help (highlight playable cards)",
+    "language": "Language",
+    "unoLevel": "UNO card set",
+    "unoLevel1": "L1 Numbers only",
+    "unoLevel2": "L2 Add Skip",
+    "unoLevel3": "L3 Add Reverse and +2",
+    "unoLevel4": "L4 Add Wild",
+    "playtime": "Play time reminder",
+    "playtimeOff": "Off",
+    "playtimeMinutes": "{n} minutes",
+    "reset": "Clear all data",
+    "resetConfirm": "Clear all progress and settings?"
+  },
+  "ai": {
+    "player1": "Bear",
+    "player2": "Bunny",
+    "player3": "Kitty"
+  }
+}

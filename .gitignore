@@ -1,0 +1,21 @@
+.DS_Store
+.idea
+.vscode
+
+node_modules
+dist
+dev-dist
+coverage
+.vite
+
+logs
+*.log
+*.tmp
+npm-debug.log*
+
+# 旧 uni-app 时代的 IDE 配置，已废弃
+.hbuilderx/
+unpackage/
+
+# 本地权限与机器路径
+.claude/settings.local.json

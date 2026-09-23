@@ -1,0 +1,53 @@
+{
+  "app": {
+    "title": "같이 놀자"
+  },
+  "home": {
+    "tapToStart": "눌러서 시작",
+    "chooseGame": "게임을 골라요"
+  },
+  "games": {
+    "memory": { "name": "카드 짝 맞추기" },
+    "snakes": { "name": "뱀과 사다리" },
+    "uno": { "name": "우노" }
+  },
+  "common": {
+    "soon": "곧 나와요",
+    "playAgain": "다시 하기",
+    "otherGame": "다른 게임",
+    "back": "뒤로",
+    "close": "닫기",
+    "yourTurn": "너의 차례야"
+  },
+  "difficulty": {
+    "label": "난이도",
+    "easy": "쉬움",
+    "normal": "보통",
+    "serious": "어려움"
+  },
+  "avatar": {
+    "choose": "캐릭터를 골라요"
+  },
+  "parent": {
+    "title": "보호자 설정",
+    "hint": "3초 길게 누르기",
+    "volume": "소리 크기",
+    "assist": "초보 도움 (낼 수 있는 카드 강조)",
+    "language": "언어",
+    "unoLevel": "우노 카드 구성",
+    "unoLevel1": "L1 숫자 카드만",
+    "unoLevel2": "L2 건너뛰기 추가",
+    "unoLevel3": "L3 방향 바꾸기와 +2 추가",
+    "unoLevel4": "L4 만능 카드 추가",
+    "playtime": "놀이 시간 알림",
+    "playtimeOff": "안 함",
+    "playtimeMinutes": "{n}분",
+    "reset": "기록 지우기",
+    "resetConfirm": "모든 기록과 설정을 지울까요?"
+  },
+  "ai": {
+    "player1": "곰돌이",
+    "player2": "토끼",
+    "player3": "야옹이"
+  }
+}

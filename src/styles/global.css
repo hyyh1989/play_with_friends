@@ -1,0 +1,79 @@
+/*
+ * 全局样式。
+ *
+ * 刻意不跟随系统深色模式 —— 给小朋友的界面要一直是亮的、暖的。
+ * 深色模式会让它变得沉闷，这是产品决定，不是遗漏。
+ */
+
+:root {
+  --bg: #fff8e7;
+  --bg-card: #ffffff;
+  --ink: #3d2c1e;
+  --ink-soft: #8a7866;
+  --accent: #ffd166;
+  --accent-2: #06d6a0;
+  --accent-3: #ef476f;
+  --accent-4: #4cc9f0;
+  --shadow: 0 6px 0 rgba(61, 44, 30, 0.15);
+  --shadow-lg: 0 10px 0 rgba(61, 44, 30, 0.15);
+  --radius: 28px;
+
+  /* 触控目标下限。设计原则：≥80px，且可点区域大于视觉区域 */
+  --tap-min: 80px;
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB',
+    'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
+  /* 小朋友会长按、拖拽、双击，全部禁掉系统默认行为 */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  overscroll-behavior: none;
+  touch-action: manipulation;
+}
+
+/* 安全区（iPad 圆角和 Home 指示条） */
+.safe-area {
+  padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right))
+    max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  /* 浏览器给 button 的默认内边距会让居中的图标看起来偏一点，统一清掉 */
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
+/* 所有可点元素的通用按下反馈：立即、明显（设计原则 2） */
+.pressable {
+  transition: transform 80ms ease-out, filter 80ms ease-out;
+}
+.pressable:active {
+  transform: scale(0.94);
+  filter: brightness(1.05);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pressable {
+    transition: none;
+  }
+}

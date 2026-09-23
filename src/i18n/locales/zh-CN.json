@@ -1,0 +1,53 @@
+{
+  "app": {
+    "title": "一起玩"
+  },
+  "home": {
+    "tapToStart": "点一下开始",
+    "chooseGame": "选一个游戏"
+  },
+  "games": {
+    "memory": { "name": "翻牌配对" },
+    "snakes": { "name": "蛇梯棋" },
+    "uno": { "name": "UNO" }
+  },
+  "common": {
+    "soon": "马上就来",
+    "playAgain": "再玩一次",
+    "otherGame": "换个游戏",
+    "back": "返回",
+    "close": "关闭",
+    "yourTurn": "轮到你了"
+  },
+  "difficulty": {
+    "label": "难度",
+    "easy": "简单",
+    "normal": "普通",
+    "serious": "认真"
+  },
+  "avatar": {
+    "choose": "选一个头像"
+  },
+  "parent": {
+    "title": "家长设置",
+    "hint": "长按 3 秒进入",
+    "volume": "音量",
+    "assist": "新手辅助（高亮可以点的牌）",
+    "language": "语言",
+    "unoLevel": "UNO 牌组等级",
+    "unoLevel1": "L1 只有数字牌",
+    "unoLevel2": "L2 加跳过",
+    "unoLevel3": "L3 加反转和 +2",
+    "unoLevel4": "L4 加万能牌",
+    "playtime": "游戏时长提醒",
+    "playtimeOff": "不提醒",
+    "playtimeMinutes": "{n} 分钟",
+    "reset": "清空记录",
+    "resetConfirm": "清空所有记录和设置？"
+  },
+  "ai": {
+    "player1": "小熊",
+    "player2": "小兔",
+    "player3": "小猫"
+  }
+}
