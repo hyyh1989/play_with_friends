@@ -4,6 +4,8 @@ A small collection of board and card games for 5-6 year olds, played on an iPad.
 
 给 5-6 岁小朋友的桌游/卡牌游戏合集，在 iPad 上玩。
 
+**▶ https://play.xiaotangyuan.workers.dev** — open it on an iPad and "Add to Home Screen".
+
 ---
 
 ## What this is

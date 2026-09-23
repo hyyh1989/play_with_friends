@@ -30,6 +30,11 @@ npm run test:watch  # 单元测试 watch 模式
 npm run typecheck   # 只做类型检查
 ```
 
+**线上地址**：https://play.xiaotangyuan.workers.dev （Cloudflare，免费）。
+`npm run deploy` 一条命令更新线上。账号子域名是 `xiaotangyuan`，以后每个应用都是
+`<应用名>.xiaotangyuan.workers.dev`；本应用线上名叫 `play`（见 wrangler.jsonc），
+和仓库名 play_with_friends 不同是有意缩短。
+
 **在 iPad 上实测**：跑 `npm run dev`，终端会打印一个 Network 地址
 （形如 `http://192.168.x.x:5173/`），iPad 和 Mac 连同一个 WiFi，
 Safari 打开这个地址 → 分享菜单 → 添加到主屏幕。
