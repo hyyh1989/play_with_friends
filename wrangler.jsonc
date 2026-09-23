@@ -1,6 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "play-with-friends",
+  // 线上应用名（URL 的第一段）。仓库叫 play_with_friends，线上叫 play，是有意缩短的
+  "name": "play",
   "compatibility_date": "2026-09-21",
   "observability": {
     "enabled": true
