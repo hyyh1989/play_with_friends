@@ -20,7 +20,12 @@ export default defineConfig({
   plugins: [
     vue(),
     VitePWA({
-      registerType: 'autoUpdate',
+      /*
+       * prompt 而不是 autoUpdate：新版本装好**原地等着**，由家长在设置里点一下才启用。
+       * autoUpdate 会让新 SW 立刻接管，而换 SW 就换掉了预缓存 ——
+       * 正在玩的那一局可能因此裂掉。更新时机由人定，见 src/core/pwa.ts。
+       */
+      registerType: 'prompt',
       includeAssets: ['icons/apple-touch-icon.png'],
       manifest: {
         name: '一起玩',

@@ -61,7 +61,13 @@
     "tutorial": "UNO 教学引导",
     "tutorialRestart": "重新开始教学",
     "tutorialRestartAction": "重来一遍",
-    "tutorialDone": "已重置 ✓"
+    "tutorialDone": "已重置 ✓",
+    "version": "版本",
+    "checkUpdate": "检查更新",
+    "checking": "正在检查…",
+    "upToDate": "已经是最新的",
+    "updateReady": "有新版本",
+    "applyUpdate": "更新"
   },
   "ai": {
     "player1": "小熊",

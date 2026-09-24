@@ -61,7 +61,13 @@
     "tutorial": "우노 튜토리얼",
     "tutorialRestart": "튜토리얼 다시 하기",
     "tutorialRestartAction": "다시 하기",
-    "tutorialDone": "초기화됨 ✓"
+    "tutorialDone": "초기화됨 ✓",
+    "version": "버전",
+    "checkUpdate": "업데이트 확인",
+    "checking": "확인 중…",
+    "upToDate": "최신 버전이에요",
+    "updateReady": "새 버전이 있어요",
+    "applyUpdate": "업데이트"
   },
   "ai": {
     "player1": "곰돌이",

@@ -6,13 +6,50 @@ import { useSettingsStore, type UnoLevel } from '../stores/settings'
 import { SUPPORTED_LOCALES } from '../i18n'
 import type { Difficulty } from '../core/types'
 import { playSfx } from '../core/audio'
+import {
+  applyUpdate,
+  BUILD_TIME,
+  checkForUpdate,
+  checking,
+  hasServiceWorker,
+  updateReady,
+} from '../core/pwa'
 
 const router = useRouter()
 const settings = useSettingsStore()
 const { t } = useI18n()
 
-const buildTime = __BUILD_TIME__
+const buildTime = BUILD_TIME
 const restarted = ref(false)
+/** 查过一次、而且确认没有新版本 —— 只有查过才说"已经是最新的" */
+const checkedClean = ref(false)
+
+/**
+ * 「添加到主屏幕」之后，iOS 不会自己去拿新版本（从多任务切回来算恢复，不算启动）。
+ * 所以给家长一个明确的按钮：有新版本就更新，没有就告诉她已经是最新的。
+ */
+async function handleCheckUpdate() {
+  playSfx('tap')
+  checkedClean.value = false
+  if (updateReady.value) {
+    await applyUpdate()
+    return
+  }
+  const found = await checkForUpdate()
+  if (found) {
+    await applyUpdate()
+    return
+  }
+  // 没有 SW 的时候（普通浏览器里打开），硬刷新就是"拿新版本"的全部含义
+  if (!hasServiceWorker()) {
+    window.location.reload()
+    return
+  }
+  {
+    checkedClean.value = true
+    setTimeout(() => (checkedClean.value = false), 2400)
+  }
+}
 
 function handleRestartTutorial() {
   playSfx('tap')
@@ -147,8 +184,27 @@ function handleReset() {
         </button>
       </section>
 
-      <!-- 核对线上是不是新版用的（PWA 会缓存旧版本） -->
-      <p class="version">{{ buildTime }}</p>
+      <!--
+        更新。加到主屏幕之后 iOS 不会自己更新，必须有个地方能手动拿新版本
+        （用户实测：iPad 上装了快捷方式后就再也刷不出新版了）
+      -->
+      <section class="row">
+        <p class="label">
+          {{ $t('parent.version') }}
+          <span class="version">{{ buildTime }}</span>
+        </p>
+        <button
+          class="chip pressable"
+          :class="{ ready: updateReady }"
+          :disabled="checking"
+          @click="handleCheckUpdate"
+        >
+          <template v-if="checking">{{ $t('parent.checking') }}</template>
+          <template v-else-if="updateReady">{{ $t('parent.updateReady') }} · {{ $t('parent.applyUpdate') }}</template>
+          <template v-else-if="checkedClean">{{ $t('parent.upToDate') }} ✓</template>
+          <template v-else>{{ $t('parent.checkUpdate') }}</template>
+        </button>
+      </section>
     </div>
   </div>
 </template>
@@ -258,12 +314,35 @@ h1 {
   transform: translateX(30px);
 }
 
+.chip.ready {
+  color: #fff;
+  background: var(--accent-2);
+  animation: ready-beat 1.8s ease-in-out infinite;
+}
+
+@keyframes ready-beat {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.06);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chip.ready {
+    animation: none;
+  }
+}
+
+/* 版本号跟在"版本"两个字后面，用来核对到底更没更上 */
 .version {
-  margin: 4px 0 16px;
+  margin-left: 8px;
   font-size: 12px;
+  font-weight: 400;
   color: var(--ink-soft);
-  text-align: center;
-  opacity: 0.6;
+  opacity: 0.7;
 }
 
 .danger {

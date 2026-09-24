@@ -61,7 +61,13 @@
     "tutorial": "UNO tutorial",
     "tutorialRestart": "Restart the tutorial",
     "tutorialRestartAction": "Restart",
-    "tutorialDone": "Reset ✓"
+    "tutorialDone": "Reset ✓",
+    "version": "Version",
+    "checkUpdate": "Check for updates",
+    "checking": "Checking…",
+    "upToDate": "Up to date",
+    "updateReady": "New version available",
+    "applyUpdate": "Update"
   },
   "ai": {
     "player1": "Bear",
