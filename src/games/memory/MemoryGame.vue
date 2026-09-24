@@ -3,7 +3,7 @@ import { computed, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import GameResult from '../../components/GameResult.vue'
 import { playSfx } from '../../core/audio'
-import { useSettingsStore } from '../../stores/settings'
+import { AI_AVATARS, AVATARS, useSettingsStore } from '../../stores/settings'
 import type { PlayerRef } from '../../core/types'
 import {
   applyAction,
@@ -53,7 +53,9 @@ onUnmounted(() => {
   clearTimeout(handoffTimer)
 })
 
-const aiAvatar = computed(() => (settings.avatar === '🐰' ? '🐻' : '🐰'))
+const aiAvatar = AI_AVATARS[0]
+/** 两个人玩时，第二个人也是小动物（人用动物、电脑用机器） */
+const friendAvatar = computed(() => AVATARS.find((a) => a !== settings.avatar) ?? AVATARS[1])
 const rows = computed(() => (state.value ? state.value.cards.length / 4 : 2))
 const finished = computed(() => (state.value ? isFinished(state.value) : false))
 const activeId = computed(() => (state.value ? currentPlayer(state.value) : null))
@@ -61,9 +63,9 @@ const activeId = computed(() => (state.value ? currentPlayer(state.value) : null
 function start() {
   const players: PlayerRef[] = [{ id: 'child', kind: 'human', avatar: settings.avatar }]
   if (mode.value === 'ai') {
-    players.push({ id: 'bear', kind: 'ai', avatar: aiAvatar.value, nameKey: 'ai.player1' })
+    players.push({ id: 'bear', kind: 'ai', avatar: aiAvatar, nameKey: 'ai.player1' })
   } else if (mode.value === 'duo') {
-    players.push({ id: 'friend', kind: 'human', avatar: aiAvatar.value })
+    players.push({ id: 'friend', kind: 'human', avatar: friendAvatar.value })
   }
   state.value = createInitialState({
     players,
@@ -161,8 +163,7 @@ function goHome() {
         <span class="mode-avatars">
           <span class="mode-avatar">{{ settings.avatar }}</span>
           <span class="vs">VS</span>
-          <span class="mode-avatar robot">{{ aiAvatar }}</span>
-          <span class="robot-badge">🤖</span>
+          <span class="mode-avatar">{{ aiAvatar }}</span>
         </span>
       </button>
       <!-- 两个人用同一台 iPad 轮流：和上面那个的区别是对面不是机器人 -->
@@ -175,7 +176,7 @@ function goHome() {
         <span class="mode-avatars">
           <span class="mode-avatar">{{ settings.avatar }}</span>
           <span class="vs">VS</span>
-          <span class="mode-avatar">{{ aiAvatar }}</span>
+          <span class="mode-avatar">{{ friendAvatar }}</span>
         </span>
       </button>
     </div>
@@ -304,20 +305,6 @@ function goHome() {
 
 .choice.active {
   border-color: var(--accent-2);
-}
-
-/* 和电脑玩那一项，给对手头像加个机器人角标，和"两个人玩"区分开 */
-.mode-avatars {
-  position: relative;
-}
-
-.robot-badge {
-  position: absolute;
-  right: -6px;
-  bottom: -8px;
-  font-size: clamp(14px, 2.2vmin, 20px);
-  line-height: 1;
-  font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
 }
 
 .handoff {

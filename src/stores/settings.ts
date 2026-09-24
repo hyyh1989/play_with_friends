@@ -9,7 +9,17 @@ import type { CoachProgress } from '../games/uno/coach'
 /** UNO 牌组等级：用"牌组里放哪些牌"调难度，见 docs/DESIGN.md 5.3 */
 export type UnoLevel = 1 | 2 | 3 | 4
 
+/** 真人的头像：小动物 */
 export const AVATARS = ['🐻', '🐰', '🐱', '🦊', '🐼', '🐯', '🐶', '🐨'] as const
+
+/*
+ * 电脑对手的头像：机器人和外星人，一眼就不是小动物。
+ *
+ * 原来电脑也用小动物、只在选择页加了个小角标区分，用户实测反馈"有一些些
+ * 理解成本"。对不认字的孩子来说，**用形象本身区分**比加标记可靠得多：
+ * 小动物 = 人，机器 = 电脑。
+ */
+export const AI_AVATARS = ['🤖', '👾', '👽'] as const
 
 export const useSettingsStore = defineStore('settings', () => {
   const locale = ref<LocaleCode>(i18n.global.locale.value as LocaleCode)

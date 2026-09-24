@@ -3,7 +3,7 @@ import { computed, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import GameResult from '../../components/GameResult.vue'
 import { playSfx } from '../../core/audio'
-import { useSettingsStore, AVATARS } from '../../stores/settings'
+import { AI_AVATARS, useSettingsStore } from '../../stores/settings'
 import type { PlayerRef } from '../../core/types'
 import {
   applyAction,
@@ -186,10 +186,10 @@ function pieceStyle(playerId: string) {
 }
 
 function start() {
-  const others = AVATARS.filter((a) => a !== settings.avatar)
   const players: PlayerRef[] = [{ id: 'child', kind: 'human', avatar: settings.avatar }]
   for (let i = 1; i < playerCount.value; i++) {
-    players.push({ id: `ai${i}`, kind: 'ai', avatar: others[i - 1], nameKey: `ai.player${i}` })
+    // 电脑对手一律用机器人形象，和真人的小动物区分开
+    players.push({ id: `ai${i}`, kind: 'ai', avatar: AI_AVATARS[i - 1], nameKey: `ai.player${i}` })
   }
   const next = createInitialState({ players, difficulty: settings.difficulty, seed: Date.now() })
   clearTimers()
@@ -364,9 +364,7 @@ const FACES = [
         <span class="mode-avatars">
           <template v-for="n in count" :key="n">
             <span v-if="n === 2" class="vs">VS</span>
-            <span class="mode-avatar">{{
-              n === 1 ? settings.avatar : AVATARS.filter((a) => a !== settings.avatar)[n - 2]
-            }}</span>
+            <span class="mode-avatar">{{ n === 1 ? settings.avatar : AI_AVATARS[n - 2] }}</span>
           </template>
         </span>
       </button>
