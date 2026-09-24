@@ -173,6 +173,45 @@ export function voiceRemaining(): number {
   return Math.max(0, (voiceEndsAt - performance.now()) / 1000)
 }
 
+/*
+ * 讲解要【排队】，不能互相打断。
+ *
+ * 一开始为了解决"两句叠在一起"，让新的一句直接掐掉旧的 —— 重叠是没了，
+ * 但变成了互相打断：实测万能牌那句 7.67 秒的讲解只播了 1.06 秒就被下一句切掉，
+ * 孩子等于什么都没听到。现在改成排队，一句说完再说下一句。
+ *
+ * 队列只留最近几条：教学话术本来就稀疏，真堆积说明时机设计有问题，
+ * 与其让孩子听一长串过期的话，不如丢掉早的。
+ */
+const QUEUE_MAX = 3
+let queue: string[] = []
+let draining = false
+
+export function speakQueued(key: string): void {
+  queue.push(key)
+  if (queue.length > QUEUE_MAX) queue.splice(0, queue.length - QUEUE_MAX)
+  if (draining) return
+  draining = true
+  void drain()
+}
+
+async function drain(): Promise<void> {
+  while (queue.length > 0) {
+    // 等当前这句（可能是别处直接 speak 的）说完
+    await whenVoiceIdle()
+    const key = queue.shift()
+    if (!key) break
+    const seconds = await speak(key)
+    await new Promise((r) => setTimeout(r, seconds * 1000 + 150))
+  }
+  draining = false
+}
+
+/** 清空还没说的话（比如换了一局） */
+export function clearVoiceQueue(): void {
+  queue = []
+}
+
 /**
  * 等到"没有语音在播、也没有语音在加载"。
  *

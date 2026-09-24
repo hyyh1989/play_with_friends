@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import GameResult from '../../components/GameResult.vue'
 import UnoCard from './UnoCard.vue'
 import PointingHand from '../../components/PointingHand.vue'
-import { playSfx, speak, whenVoiceIdle } from '../../core/audio'
+import { clearVoiceQueue, playSfx, speak, speakQueued } from '../../core/audio'
 import { useSettingsStore, AVATARS } from '../../stores/settings'
 import type { PlayerRef } from '../../core/types'
 import {
@@ -152,8 +152,8 @@ onMounted(() => {
   const needsTeaching = settings.tutorialEnabled && !allMastered(settings.coachProgress)
   if (needsTeaching) {
     phase.value = 'ask'
-    // 首页点卡片时念了游戏名，等它彻底说完再问，否则两句叠在一起
-    void whenVoiceIdle().then(() => speak('uno.ask'))
+    // 排队：首页刚念完游戏名，这句会等它说完（不会叠也不会打断）
+    speakQueued('uno.ask')
   }
 })
 
@@ -195,6 +195,7 @@ function start() {
     players.push({ id: `ai${i}`, kind: 'ai', avatar: pool[i - 1], nameKey: `ai.player${i}` })
   }
   clearTimers()
+  clearVoiceQueue()
   busy.value = false
   showResult.value = false
   pendingWildId.value = null
@@ -309,7 +310,7 @@ function narrateAfterPlay(before: UnoState, card: Card, byChild: boolean) {
 
   clearTimeout(narrateTimer)
   // 等牌飞到弃牌堆落定再说，否则话说完牌还没到
-  narrateTimer = window.setTimeout(() => void speak(line!), FLY_MS + 250)
+  narrateTimer = window.setTimeout(() => speakQueued(line!), FLY_MS + 250)
 }
 
 /** 记下每张手牌对应的 DOM 元素，手指要靠它定位 */
@@ -331,7 +332,7 @@ function evaluateHint() {
 /** 同一条提示只念一次，别反复念到烦 */
 function setHint(next: Hint | null) {
   if (next && next.voice !== lastVoice) {
-    void speak(next.voice)
+    speakQueued(next.voice)
     lastVoice = next.voice
     // 纯告知类的提示没有对应动作，讲过就算数，否则会一直重复讲
     if (next.id === 'opponentCount') {
@@ -413,7 +414,7 @@ watch(pendingWildId, (id) => {
   settings.coachProgress = { ...settings.coachProgress, [key]: MASTERY }
   hint.value = { id: key, target: { kind: 'colors' }, voice: `uno.${key}`, first: true }
   clearTimeout(narrateTimer)
-  narrateTimer = window.setTimeout(() => void speak(`uno.${key}`), 200)
+  narrateTimer = window.setTimeout(() => speakQueued(`uno.${key}`), 200)
 })
 
 function chooseColor(color: CardColor) {
@@ -449,7 +450,7 @@ watch(
         opponentDrew: (settings.coachProgress.opponentDrew ?? 0) + MASTERY,
       }
       clearTimeout(narrateTimer)
-      narrateTimer = window.setTimeout(() => void speak('uno.opponentDrew'), 600)
+      narrateTimer = window.setTimeout(() => speakQueued('uno.opponentDrew'), 600)
     }
     if (event?.type === 'play') {
       playSfx('flip')
@@ -467,7 +468,7 @@ watch(
     if (isFinished(current)) {
       playSfx('celebrate')
       // 说清楚"为什么结束了"—— 孩子出完最后一张牌时并不知道那就是赢
-      if (getWinner(current) === 'child') void speak('uno.win')
+      if (getWinner(current) === 'child') speakQueued('uno.win')
       later(() => (showResult.value = true), WIN_CELEBRATE_MS)
       return
     }
