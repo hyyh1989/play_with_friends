@@ -23,6 +23,8 @@ const buildTime = BUILD_TIME
 const restarted = ref(false)
 /** 查过一次、而且确认没有新版本 —— 只有查过才说"已经是最新的" */
 const checkedClean = ref(false)
+/** 正在拿新版本（页面马上会刷新） */
+const applying = ref(false)
 
 /**
  * 「添加到主屏幕」之后，iOS 不会自己去拿新版本（从多任务切回来算恢复，不算启动）。
@@ -32,6 +34,7 @@ async function handleCheckUpdate() {
   playSfx('tap')
   checkedClean.value = false
   if (updateReady.value) {
+    applying.value = true
     await applyUpdate()
     return
   }
@@ -193,14 +196,24 @@ function handleReset() {
           {{ $t('parent.version') }}
           <span class="version">{{ buildTime }}</span>
         </p>
+        <!--
+          ⚠️ 这个按钮**永远不能变成不可点**。它是家长手里唯一的救生索 ——
+          一旦点不动，人就被锁在旧版本里，连"修好了更新按钮"的那一版都拿不到。
+          原来写了 :disabled="checking"，而 checking 会因为 update() 不返回
+          卡在 true（实测中招）。现在只在真正刷新的那一瞬间挡一下。
+          "有新版本"永远排在"正在检查"前面显示：能更新就该让她去点，别让检查挡路。
+        -->
         <button
           class="chip pressable"
           :class="{ ready: updateReady }"
-          :disabled="checking"
+          :disabled="applying"
           @click="handleCheckUpdate"
         >
-          <template v-if="checking">{{ $t('parent.checking') }}</template>
-          <template v-else-if="updateReady">{{ $t('parent.updateReady') }} · {{ $t('parent.applyUpdate') }}</template>
+          <template v-if="applying">{{ $t('parent.applying') }}</template>
+          <template v-else-if="updateReady">
+            {{ $t('parent.updateReady') }} · {{ $t('parent.applyUpdate') }}
+          </template>
+          <template v-else-if="checking">{{ $t('parent.checking') }}</template>
           <template v-else-if="checkedClean">{{ $t('parent.upToDate') }} ✓</template>
           <template v-else>{{ $t('parent.checkUpdate') }}</template>
         </button>

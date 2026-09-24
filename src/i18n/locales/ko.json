@@ -67,7 +67,8 @@
     "checking": "확인 중…",
     "upToDate": "최신 버전이에요",
     "updateReady": "새 버전이 있어요",
-    "applyUpdate": "업데이트"
+    "applyUpdate": "업데이트",
+    "applying": "업데이트 중…"
   },
   "ai": {
     "player1": "곰돌이",

@@ -67,7 +67,8 @@
     "checking": "Checking…",
     "upToDate": "Up to date",
     "updateReady": "New version available",
-    "applyUpdate": "Update"
+    "applyUpdate": "Update",
+    "applying": "Updating…"
   },
   "ai": {
     "player1": "Bear",

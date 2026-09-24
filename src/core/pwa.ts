@@ -26,11 +26,10 @@ export const checking = ref(false)
 /** 这个包是什么时候构建的，设置页显示出来，好确认到底更没更上 */
 export const BUILD_TIME = __BUILD_TIME__
 
-let applySW: ((reloadPage?: boolean) => Promise<void>) | null = null
 let registration: ServiceWorkerRegistration | undefined
 
 export function setupPwa(): void {
-  applySW = registerSW({
+  registerSW({
     immediate: true,
     onNeedRefresh() {
       updateReady.value = true
@@ -48,22 +47,35 @@ export function setupPwa(): void {
   })
 }
 
-/** 去服务器问一次有没有新版本。返回"有没有" */
+/** 给任何一个可能吊死的 promise 套一个上限，到点就当它没成功 */
+function withTimeout<T>(task: Promise<T>, ms: number): Promise<T | undefined> {
+  return Promise.race([task, new Promise<undefined>((done) => setTimeout(done, ms))])
+}
+
+/**
+ * 去服务器问一次有没有新版本。返回"有没有"。
+ *
+ * ⚠️ 这里的每一步都必须有超时。实测中招（2026-09-24）：`registration.update()`
+ * 在 iOS 上网络一卡就**永远不返回**，`checking` 于是卡在 true，
+ * 而按钮写了 `:disabled="checking"` —— 家长看到"有新版本"的小红点，
+ * 按钮却永远点不动。这个函数还挂在 visibilitychange 上，切一次 app 就可能中招。
+ */
 export async function checkForUpdate(): Promise<boolean> {
-  if (!registration) return false
+  if (!registration || checking.value) return updateReady.value
   checking.value = true
   try {
-    await registration.update()
-    // update() 返回时新版本可能还在装，等它装完（最多 6 秒）
+    await withTimeout(registration.update(), 8000)
+    // update() 返回时新版本可能还在装，等它装完
     const installing = registration.installing
     if (installing) {
-      await new Promise<void>((resolve) => {
-        const done = () => {
-          if (installing.state === 'installed' || installing.state === 'redundant') resolve()
-        }
-        installing.addEventListener('statechange', done)
-        setTimeout(resolve, 6000)
-      })
+      await withTimeout(
+        new Promise<void>((resolve) => {
+          installing.addEventListener('statechange', () => {
+            if (installing.state === 'installed' || installing.state === 'redundant') resolve()
+          })
+        }),
+        8000,
+      )
     }
     if (registration.waiting) updateReady.value = true
   } catch {
@@ -79,8 +91,27 @@ export function hasServiceWorker(): boolean {
   return registration !== undefined
 }
 
-/** 启用等着的那个新版本，然后刷新页面 */
+/**
+ * 拿到新版本。**这一步必须不可能失败** —— 它是家长手里唯一的救生索，
+ * 一旦它不灵，人就被锁在旧版本里，连"修好了更新按钮"的那一版都拿不到。
+ *
+ * 所以不走"礼貌"的那条路（给等着的 SW 发 SKIP_WAITING 再等它接管）：
+ * 那条路依赖 workbox 内部状态和 controllerchange 事件，任何一环不响应就静默卡住，
+ * 从家长的角度就是"点了没反应"。改成直接**把 SW 和缓存全清掉再刷新**：
+ * 代价是要重新下载一次预缓存（几 MB，家里 Wi-Fi 几秒），换来的是它不会失败。
+ */
 export async function applyUpdate(): Promise<void> {
-  if (applySW) await applySW(true)
-  else window.location.reload()
+  try {
+    if ('serviceWorker' in navigator) {
+      const all = await withTimeout(navigator.serviceWorker.getRegistrations(), 4000)
+      await withTimeout(Promise.all((all ?? []).map((one) => one.unregister())), 4000)
+    }
+    if ('caches' in window) {
+      const names = await withTimeout(caches.keys(), 4000)
+      await withTimeout(Promise.all((names ?? []).map((name) => caches.delete(name))), 4000)
+    }
+  } catch {
+    // 清不掉也照样刷新 —— 至少试一次，总比卡在这里强
+  }
+  window.location.reload()
 }

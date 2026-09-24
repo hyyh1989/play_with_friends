@@ -67,7 +67,8 @@
     "checking": "正在检查…",
     "upToDate": "已经是最新的",
     "updateReady": "有新版本",
-    "applyUpdate": "更新"
+    "applyUpdate": "更新",
+    "applying": "正在更新…"
   },
   "ai": {
     "player1": "小熊",
