@@ -2,6 +2,8 @@
 import { computed, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import GameResult from '../../components/GameResult.vue'
+import GameHelp from '../../components/GameHelp.vue'
+import MemoryHint from './MemoryHint.vue'
 import { playSfx } from '../../core/audio'
 import { AI_AVATARS, AVATARS, useSettingsStore } from '../../stores/settings'
 import type { PlayerRef } from '../../core/types'
@@ -137,6 +139,9 @@ function playAgain() {
 function goHome() {
   router.push('/')
 }
+
+/** 右上角 ? 打开的示意 */
+const showHelp = ref(false)
 </script>
 
 <template>
@@ -216,7 +221,12 @@ function goHome() {
           </div>
         </template>
       </div>
+      <span class="hud-spacer" />
     </header>
+
+    <GameHelp v-model:open="showHelp" voice="memory.goal">
+      <MemoryHint />
+    </GameHelp>
 
     <div class="board-wrap">
       <div
@@ -361,10 +371,17 @@ function goHome() {
 
 
 .game {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;
 }
+
+/* 和右上角那个 ? 同宽，中间的内容才是真的居中 */
+.hud-spacer {
+  flex: 0 0 52px;
+}
+
 
 .hud {
   display: flex;

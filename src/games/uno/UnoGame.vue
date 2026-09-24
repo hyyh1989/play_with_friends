@@ -2,6 +2,8 @@
 import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import GameResult from '../../components/GameResult.vue'
+import GameHelp from '../../components/GameHelp.vue'
+import UnoHint from './UnoHint.vue'
 import UnoCard from './UnoCard.vue'
 import PointingHand from '../../components/PointingHand.vue'
 import { clearVoiceQueue, playSfx, speak, speakQueued } from '../../core/audio'
@@ -41,6 +43,16 @@ const settings = useSettingsStore()
  */
 const phase = ref<'ask' | 'setup' | 'playing'>('setup')
 const coachOn = ref(false)
+/**
+ * 这一局要不要语音讲解。
+ *
+ * 和 settings.tutorialEnabled 不是一回事：那个是家长端的总开关，
+ * 这个是孩子在开场那一屏当场做的选择。**选了"直接玩"就一句都不讲** ——
+ * 原来只关掉了教练的手指提示，功能牌旁白仍然照念（用户实测提的）。
+ */
+const narrateOn = ref(true)
+/** 右上角 ? 打开的示意 */
+const showHelp = ref(false)
 const hint = shallowRef<Hint | null>(null)
 const handRefs = new Map<string, HTMLElement>()
 const swatchesEl = ref<HTMLElement | null>(null)
@@ -184,6 +196,20 @@ function playable(card: Card): boolean {
   return state.value ? canPlay(state.value, card) : false
 }
 
+/**
+ * 要不要给这张牌打"可以出"的高亮。
+ *
+ * **不是自己的回合就一个都不提示** —— 对手在出牌时我的牌还亮着，
+ * 孩子会以为该她了（用户实测提的）。轮次归属比"提前想好出哪张"重要得多。
+ */
+function hinted(card: Card): boolean {
+  return settings.assistHighlight && myTurn.value && playable(card)
+}
+
+function dimmed(card: Card): boolean {
+  return settings.assistHighlight && myTurn.value && !playable(card)
+}
+
 function handCount(playerId: string): number {
   return state.value?.hands[playerId]?.length ?? 0
 }
@@ -222,6 +248,7 @@ function start() {
 /** 开场选择：跟我学 / 直接玩 */
 function startWithCoach() {
   coachOn.value = true
+  narrateOn.value = true
   playerCount.value = 2 // 教学时固定两人，少一个要做的决定
   start()
   // 牌桌先摆出来，导览才有东西可指
@@ -230,6 +257,8 @@ function startWithCoach() {
 
 function skipCoach() {
   coachOn.value = false
+  // 直接玩 = 一句都不讲，功能牌旁白也不讲
+  narrateOn.value = false
   phase.value = 'setup'
   playSfx('tap')
 }
@@ -264,7 +293,7 @@ function skipIntroBeat() {
  * 每句只说一次，说完就记下。用独立定时器，别被 clearTimers 清掉。
  */
 function narrateAfterPlay(before: UnoState, card: Card, byChild: boolean) {
-  if (!settings.tutorialEnabled) return
+  if (!settings.tutorialEnabled || !narrateOn.value) return
   const seen = (id: string) => (settings.coachProgress[id as never] ?? 0) > 0
   const mark = (id: string) => {
     settings.coachProgress = { ...settings.coachProgress, [id]: MASTERY }
@@ -406,7 +435,7 @@ function tapCard(card: Card) {
  * 原来它写在教练里，等于永远触发不到（用户实测发现）。
  */
 watch(pendingWildId, (id) => {
-  if (!id || !settings.tutorialEnabled) return
+  if (!id || !settings.tutorialEnabled || !narrateOn.value) return
   const card = myHand.value.find((c) => c.id === id)
   if (!card) return
   const key = card.kind === 'wild4' ? 'wild4' : 'wild'
@@ -567,6 +596,10 @@ function goHome() {
           :class="{ active: player.id === activeId }"
         >
           <span class="seat-avatar">{{ player.avatar }}</span>
+          <!-- 正在轮到它：三个点跳一跳，说明"它在操作，不是卡住了" -->
+          <span v-if="player.id === activeId && !finished" class="thinking">
+            <i /><i /><i />
+          </span>
           <!-- 对手手牌：一个牌堆加一个数字就够了，铺开一排牌多了会很乱 -->
           <div class="opp-hand" :ref="(el) => setSeatRef(player.id, el as HTMLElement)">
             <span class="opp-card"><UnoCard back /></span>
@@ -574,7 +607,12 @@ function goHome() {
           </div>
         </div>
       </div>
+      <span class="hud-spacer" />
     </header>
+
+    <GameHelp v-model:open="showHelp" voice="uno.goal">
+      <UnoHint />
+    </GameHelp>
 
     <div class="table">
       <!-- 摸牌堆：叠起来才看得出是一摞可以抽的牌 -->
@@ -604,6 +642,13 @@ function goHome() {
     </div>
 
     <footer ref="handEl" class="hand-bar" :class="{ mine: myTurn }">
+      <!--
+        自己的头像也放进来，和上面对手的头像用**同一套**语言：
+        谁亮起来就轮到谁。三四个人玩时，光靠"手牌区变绿"认不出轮次转到哪儿了。
+      -->
+      <div class="me" :class="{ active: myTurn }">
+        <span class="seat-avatar">{{ settings.avatar }}</span>
+      </div>
       <div class="hand">
         <button
           v-for="card in myHand"
@@ -611,8 +656,8 @@ function goHome() {
           :ref="(el) => setHandRef(card.id, el)"
           class="hand-slot pressable"
           :class="{
-            playable: playable(card) && settings.assistHighlight,
-            resting: !playable(card) && settings.assistHighlight,
+            playable: hinted(card),
+            resting: dimmed(card),
             shaking: shakingId === card.id,
           }"
           @click="tapCard(card)"
@@ -827,10 +872,17 @@ function goHome() {
 }
 
 .game {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;
 }
+
+/* 和右上角那个 ? 同宽，中间的内容才是真的居中 */
+.hud-spacer {
+  flex: 0 0 52px;
+}
+
 
 .hud {
   display: flex;
@@ -862,15 +914,72 @@ function goHome() {
   gap: 10px;
   padding: 8px 14px;
   border-radius: 20px;
-  opacity: 0.45;
-  transition: all 180ms;
+  /* 没轮到就退得很远：三四个人玩时，对比不够强根本看不出轮到谁 */
+  opacity: 0.3;
+  filter: grayscale(0.7);
+  transform: scale(0.94);
+  transition: all 200ms;
 }
 
 .seat.active {
   background: var(--bg-card);
   opacity: 1;
-  transform: scale(1.06);
-  box-shadow: var(--shadow);
+  filter: none;
+  transform: scale(1.12);
+  box-shadow:
+    0 0 0 4px var(--accent-2),
+    var(--shadow);
+}
+
+/* 轮到它时头像轻轻跳 —— 静止的高亮容易被当成背景 */
+.seat.active .seat-avatar {
+  animation: seat-bob 1.4s ease-in-out infinite;
+}
+
+@keyframes seat-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+/* "它在想" —— 让等待看起来是有人在操作，而不是卡住了 */
+.thinking {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.thinking i {
+  width: 6px;
+  height: 6px;
+  background: var(--ink-soft);
+  border-radius: 50%;
+  animation: think 1.1s ease-in-out infinite;
+}
+
+.thinking i:nth-child(2) {
+  animation-delay: 0.16s;
+}
+
+.thinking i:nth-child(3) {
+  animation-delay: 0.32s;
+}
+
+@keyframes think {
+  0%,
+  60%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-4px);
+  }
 }
 
 .seat.uno {
@@ -987,7 +1096,10 @@ function goHome() {
 }
 
 .hand-bar {
-  padding: clamp(8px, 1.6vmin, 16px) 0;
+  display: flex;
+  align-items: center;
+  gap: clamp(8px, 2vmin, 20px);
+  padding: clamp(8px, 1.6vmin, 16px) clamp(8px, 2vmin, 18px);
   border-radius: var(--radius);
   transition: background 200ms;
 }
@@ -996,12 +1108,38 @@ function goHome() {
   background: rgba(0, 184, 132, 0.16);
 }
 
+/* 自己的头像，和对手席位同一套写法 */
+.me {
+  flex: 0 0 auto;
+  padding: 8px 10px;
+  border-radius: 20px;
+  opacity: 0.3;
+  filter: grayscale(0.7);
+  transform: scale(0.94);
+  transition: all 200ms;
+}
+
+.me.active {
+  background: var(--bg-card);
+  opacity: 1;
+  filter: none;
+  transform: scale(1.12);
+  box-shadow:
+    0 0 0 4px var(--accent-2),
+    var(--shadow);
+}
+
+.me.active .seat-avatar {
+  animation: seat-bob 1.4s ease-in-out infinite;
+}
+
 .hand-bar.uno {
   background: rgba(249, 194, 46, 0.4);
 }
 
 .hand {
   display: flex;
+  flex: 1;
   flex-wrap: wrap;
   gap: clamp(6px, 1.4vmin, 14px);
   justify-content: center;
@@ -1088,7 +1226,10 @@ function goHome() {
   .pile {
     transition: none;
   }
-  .pile.ready {
+  .pile.ready,
+  .seat.active .seat-avatar,
+  .me.active .seat-avatar,
+  .thinking i {
     animation: none;
   }
 }

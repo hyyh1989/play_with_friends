@@ -2,7 +2,7 @@
 import { computed, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import GameResult from '../../components/GameResult.vue'
-import { playSfx, speak, stopVoice } from '../../core/audio'
+import { playSfx } from '../../core/audio'
 import { AI_AVATARS, AVATARS, useSettingsStore } from '../../stores/settings'
 import type { PlayerRef } from '../../core/types'
 import {
@@ -20,6 +20,7 @@ import {
 } from './rules'
 import { chooseAiAction } from './ai'
 import WinHint from './WinHint.vue'
+import GameHelp from '../../components/GameHelp.vue'
 
 const AI_THINK_MS = 800
 /** 棋子从上方掉下来用多久 */
@@ -40,6 +41,8 @@ const handoffTo = ref<string | null>(null)
 const showGoal = ref(false)
 /** 一次打开 app 只自动弹一次，玩第二局就别再挡着了 */
 let goalShownThisSession = false
+/** 这次是自动弹的（讲完要自己收起来），还是她按 ? 打开的（她自己关） */
+const goalAutoShown = ref(false)
 
 let timers: number[] = []
 function later(fn: () => void, ms: number) {
@@ -49,10 +52,7 @@ function clearTimers() {
   timers.forEach(clearTimeout)
   timers = []
 }
-onUnmounted(() => {
-  clearTimers()
-  stopVoice()
-})
+onUnmounted(clearTimers)
 
 const aiAvatar = AI_AVATARS[0]
 const friendAvatar = computed(() => AVATARS.find((a) => a !== settings.avatar) ?? AVATARS[1])
@@ -105,11 +105,11 @@ function start() {
   phase.value = 'playing'
   playSfx('tap')
 
-  // 第一次开局先讲清楚"怎样算赢"，之后自己会关掉；点一下也能提前关
+  // 第一次开局先讲清楚"怎样算赢"，讲完自己收起来；点一下也能提前关
   if (!goalShownThisSession) {
     goalShownThisSession = true
+    goalAutoShown.value = true
     showGoal.value = true
-    void speak('c4.goal').then((ms) => later(closeGoal, Math.max(ms, 2600) + 600))
   }
 }
 
@@ -170,19 +170,18 @@ watch(
   { immediate: true },
 )
 
-function openGoal() {
-  showGoal.value = true
-  playSfx('tap')
-  void speak('c4.goal')
-}
-
 function closeGoal() {
   showGoal.value = false
-  stopVoice()
+  goalAutoShown.value = false
+}
+
+/** 开局自动弹的那次：讲完就收。她自己按 ? 打开的就一直留着，由她关 */
+function onGoalSpoken(seconds: number) {
+  if (!goalAutoShown.value) return
+  later(closeGoal, Math.max(seconds * 1000, 2600) + 600)
 }
 
 function goHome() {
-  stopVoice()
   router.push('/')
 }
 
@@ -244,7 +243,8 @@ function dropStyle(col: number) {
           </div>
         </template>
       </div>
-      <button class="help-btn pressable" :aria-label="$t('common.back')" @click="openGoal">?</button>
+      <!-- 右上角的 ? 是绝对定位的，这里留一块同宽的空位让头像保持居中 -->
+      <span class="hud-spacer" />
     </header>
 
     <div class="board-wrap">
@@ -306,10 +306,10 @@ function dropStyle(col: number) {
       </span>
     </footer>
 
-    <!-- 怎样算赢：点任意处关掉 -->
-    <div v-if="showGoal" class="goal-overlay" @click="closeGoal">
+    <!-- 怎样算赢：右上角 ? 随时再看；第一次开局会自动弹一次 -->
+    <GameHelp v-model:open="showGoal" voice="c4.goal" @spoke="onGoalSpoken">
       <WinHint />
-    </div>
+    </GameHelp>
 
     <div v-if="handoffTo" class="handoff">
       <span class="handoff-avatar">{{ avatarOf(handoffTo) }}</span>
@@ -360,48 +360,14 @@ function dropStyle(col: number) {
   box-shadow: var(--shadow);
 }
 
-/* 随时再看一遍"怎样算赢"。和返回按钮一样大，左右对称 */
-.help-btn {
-  display: grid;
-  place-items: center;
-  width: 52px;
-  height: 52px;
-  font-size: 26px;
-  font-weight: 800;
-  color: var(--ink-soft);
-  background: var(--bg-card);
-  border-radius: 50%;
-  box-shadow: var(--shadow);
-}
 
-.goal-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 20;
-  display: grid;
-  place-items: center;
-  padding: 5vmin;
-  background: rgba(61, 44, 30, 0.55);
-  animation: goal-in 220ms ease-out;
-}
 
-@keyframes goal-in {
-  from {
-    opacity: 0;
-  }
-}
 
-/* 浮层里是主角：垫一块白卡再画大一点，否则蓝棋盘压在暗底的蓝棋盘上，糊成一片 */
-.goal-overlay :deep(.win-hint) {
-  padding: clamp(16px, 3.5vmin, 34px);
-  background: var(--bg-card);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-lg);
-}
 
-.goal-overlay :deep(.mini) {
-  width: clamp(92px, 21vmin, 190px);
-  height: clamp(92px, 21vmin, 190px);
+
+/* 和右上角那个 ? 同宽，头像才是真的居中 */
+.hud-spacer {
+  flex: 0 0 52px;
 }
 
 .players {

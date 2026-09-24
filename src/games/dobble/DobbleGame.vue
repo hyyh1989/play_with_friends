@@ -17,6 +17,8 @@ import {
 } from './rules'
 import { aiDelay, chooseAiAction } from './ai'
 import { symbolOf } from './symbols'
+import DobbleHint from './DobbleHint.vue'
+import GameHelp from '../../components/GameHelp.vue'
 
 /** 对上了以后，先把那个图案亮出来给孩子看清，再换下一局 */
 const ROUND_FLASH_MS = 1200
@@ -44,6 +46,8 @@ const flash = ref<{ symbol: number; playerId: string } | null>(null)
 const centerLocked = ref(false)
 /** 刚点了公共牌却谁都没选 —— 用来提示"先点自己那张" */
 const hintPickFirst = ref(false)
+/** 右上角 ? 打开的示意 */
+const showHelp = ref(false)
 
 let timers: number[] = []
 function later(fn: () => void, ms: number) {
@@ -287,17 +291,7 @@ function slotStyle(card: number[], slot: number) {
     <button class="corner-back pressable" :aria-label="$t('common.back')" @click="goHome">←</button>
 
     <!-- 规则示意：自己牌上点一个 → 公共牌上点同一个。不用文字 -->
-    <div class="how">
-      <span class="how-card">
-        <span class="how-pip">🐻</span><span class="how-pip target">⭐</span
-        ><span class="how-pip">🚗</span>
-      </span>
-      <span class="how-arrow">→</span>
-      <span class="how-card is-center">
-        <span class="how-pip">🍎</span><span class="how-pip target">⭐</span
-        ><span class="how-pip">⚽</span>
-      </span>
-    </div>
+    <DobbleHint />
 
     <div class="choices">
       <button
@@ -347,6 +341,9 @@ function slotStyle(card: number[], slot: number) {
 
   <div v-else class="game safe-area">
     <button class="exit-btn pressable" :aria-label="$t('common.back')" @click="goHome">←</button>
+    <GameHelp v-model:open="showHelp" voice="dobble.goal">
+      <DobbleHint />
+    </GameHelp>
 
     <template v-for="(seat, index) in seats" :key="seat.player!.id">
       <!-- 上面那半边 → 中间公共牌 → 下面那半边 -->
@@ -440,58 +437,12 @@ function slotStyle(card: number[], slot: number) {
   height: 100%;
 }
 
-/* ── 规则示意：自己的牌 → 公共牌，同一个图案被圈出来 ── */
-.how {
-  display: flex;
-  align-items: center;
-  gap: clamp(8px, 2vmin, 18px);
-}
 
-.how-card {
-  display: flex;
-  gap: 4px;
-  align-items: center;
-  padding: clamp(8px, 1.6vmin, 14px) clamp(10px, 2vmin, 18px);
-  background: var(--bg-card);
-  border-radius: 999px;
-  box-shadow: var(--shadow);
-}
 
-/* 公共牌画成有虚线边的，和游戏里一致 */
-.how-card.is-center {
-  border: 3px dashed rgba(61, 44, 30, 0.25);
-}
 
-.how-pip {
-  font-size: clamp(20px, 3.4vmin, 34px);
-  line-height: 1;
-  font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
-  opacity: 0.45;
-}
 
-.how-pip.target {
-  padding: 3px;
-  opacity: 1;
-  border-radius: 50%;
-  box-shadow: 0 0 0 3px var(--accent-2);
-  animation: how-beat 1.6s ease-in-out infinite;
-}
 
-@keyframes how-beat {
-  0%,
-  100% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.18);
-  }
-}
 
-.how-arrow {
-  font-size: clamp(20px, 3.2vmin, 32px);
-  font-weight: 800;
-  color: var(--accent-2);
-}
 
 /* ── 每张牌几个图案 ── */
 .sizes {
@@ -795,7 +746,6 @@ function slotStyle(card: number[], slot: number) {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .how-pip.target,
   .card.shaking,
   .card.hint-me {
     animation: none;
