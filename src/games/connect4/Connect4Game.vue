@@ -2,7 +2,7 @@
 import { computed, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import GameResult from '../../components/GameResult.vue'
-import { playSfx } from '../../core/audio'
+import { playSfx, speak, stopVoice } from '../../core/audio'
 import { AI_AVATARS, AVATARS, useSettingsStore } from '../../stores/settings'
 import type { PlayerRef } from '../../core/types'
 import {
@@ -19,6 +19,7 @@ import {
   type Connect4State,
 } from './rules'
 import { chooseAiAction } from './ai'
+import WinHint from './WinHint.vue'
 
 const AI_THINK_MS = 800
 /** 棋子从上方掉下来用多久 */
@@ -35,6 +36,10 @@ const state = shallowRef<Connect4State | null>(null)
 const showResult = ref(false)
 const dropping = ref<number | null>(null)
 const handoffTo = ref<string | null>(null)
+/** "连成四个就赢"的示意图，开局自动放一次，之后按 ? 随时再看 */
+const showGoal = ref(false)
+/** 一次打开 app 只自动弹一次，玩第二局就别再挡着了 */
+let goalShownThisSession = false
 
 let timers: number[] = []
 function later(fn: () => void, ms: number) {
@@ -44,7 +49,10 @@ function clearTimers() {
   timers.forEach(clearTimeout)
   timers = []
 }
-onUnmounted(clearTimers)
+onUnmounted(() => {
+  clearTimers()
+  stopVoice()
+})
 
 const aiAvatar = AI_AVATARS[0]
 const friendAvatar = computed(() => AVATARS.find((a) => a !== settings.avatar) ?? AVATARS[1])
@@ -96,6 +104,13 @@ function start() {
   state.value = createInitialState({ players, difficulty: settings.difficulty, seed: Date.now() })
   phase.value = 'playing'
   playSfx('tap')
+
+  // 第一次开局先讲清楚"怎样算赢"，之后自己会关掉；点一下也能提前关
+  if (!goalShownThisSession) {
+    goalShownThisSession = true
+    showGoal.value = true
+    void speak('c4.goal').then((ms) => later(closeGoal, Math.max(ms, 2600) + 600))
+  }
 }
 
 function dispatch(action: Connect4Action) {
@@ -155,7 +170,19 @@ watch(
   { immediate: true },
 )
 
+function openGoal() {
+  showGoal.value = true
+  playSfx('tap')
+  void speak('c4.goal')
+}
+
+function closeGoal() {
+  showGoal.value = false
+  stopVoice()
+}
+
 function goHome() {
+  stopVoice()
   router.push('/')
 }
 
@@ -173,6 +200,8 @@ function dropStyle(col: number) {
 <template>
   <div v-if="phase === 'setup'" class="setup safe-area">
     <button class="corner-back pressable" :aria-label="$t('common.back')" @click="goHome">←</button>
+    <!-- 进游戏先看见"怎样算赢"，不用点任何东西 -->
+    <WinHint />
     <div class="choices">
       <button
         class="choice pressable"
@@ -215,6 +244,7 @@ function dropStyle(col: number) {
           </div>
         </template>
       </div>
+      <button class="help-btn pressable" :aria-label="$t('common.back')" @click="openGoal">?</button>
     </header>
 
     <div class="board-wrap">
@@ -275,6 +305,11 @@ function dropStyle(col: number) {
         <span class="chip-face">{{ avatarOf(activeId) }}</span>
       </span>
     </footer>
+
+    <!-- 怎样算赢：点任意处关掉 -->
+    <div v-if="showGoal" class="goal-overlay" @click="closeGoal">
+      <WinHint />
+    </div>
 
     <div v-if="handoffTo" class="handoff">
       <span class="handoff-avatar">{{ avatarOf(handoffTo) }}</span>
@@ -395,6 +430,50 @@ function dropStyle(col: number) {
   box-shadow: var(--shadow);
 }
 
+/* 随时再看一遍"怎样算赢"。和返回按钮一样大，左右对称 */
+.help-btn {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--ink-soft);
+  background: var(--bg-card);
+  border-radius: 50%;
+  box-shadow: var(--shadow);
+}
+
+.goal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 5vmin;
+  background: rgba(61, 44, 30, 0.55);
+  animation: goal-in 220ms ease-out;
+}
+
+@keyframes goal-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* 浮层里是主角：垫一块白卡再画大一点，否则蓝棋盘压在暗底的蓝棋盘上，糊成一片 */
+.goal-overlay :deep(.win-hint) {
+  padding: clamp(16px, 3.5vmin, 34px);
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+}
+
+.goal-overlay :deep(.mini) {
+  width: clamp(92px, 21vmin, 190px);
+  height: clamp(92px, 21vmin, 190px);
+}
+
 .players {
   display: flex;
   flex: 1;
@@ -444,17 +523,19 @@ function dropStyle(col: number) {
   min-height: 0;
   place-items: center;
   padding: clamp(6px, 1.4vmin, 14px) 0;
+  /* 让棋盘能同时问到"可用宽"和"可用高" —— 见下面 .board 的注释 */
+  container-type: size;
 }
 
 .board {
   position: relative;
   /*
-   * 尺寸由【高度】驱动：写 width:100% 的话 aspect-ratio 会算出比屏幕还高的棋盘，
-   * max-height 拦不住（前面几个棋盘踩过同一个坑）。
+   * 棋盘要同时被宽和高卡住，而 aspect-ratio 只认其中一个：
+   *   写 width:100%  → 横屏时算出比屏幕还高的棋盘，max-height 拦不住
+   *   写 height:100% → 竖屏时算出比屏幕还宽的棋盘，右边一列被切掉
+   * 所以显式取两者里小的那个：可用宽，和「可用高 × 7/6」。
    */
-  height: 100%;
-  max-width: 100%;
-  max-height: 100%;
+  width: min(100cqw, 100cqh * 7 / 6);
   aspect-ratio: 7 / 6;
   background: linear-gradient(170deg, #4cc9f0, #2a9df4);
   border-radius: clamp(12px, 2.4vmin, 24px);

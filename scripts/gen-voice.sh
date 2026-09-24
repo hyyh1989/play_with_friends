@@ -44,6 +44,7 @@ LINES='
 game.memory|翻牌配对|Memory Match|카드 짝 맞추기
 game.snakes|蛇梯棋|Snakes and Ladders|뱀과 사다리
 game.uno|优诺牌|Uno|우노
+c4.goal|连成四个就赢啦。横的、竖的、斜的，都算。|Line up four and you win. Across, up and down, or slanted — they all count.|네 개를 나란히 놓으면 이겨. 가로, 세로, 대각선 다 괜찮아.
 uno.ask|要我教你玩吗？|Shall I show you how to play?|내가 방법을 알려 줄까?
 uno.yourTurn|轮到你啦。|It is your turn.|이제 네 차례야.
 uno.intro.goal|我们轮流出牌，看谁先把手里的牌出完。出掉的牌，就放在中间这里。|We take turns playing cards. Whoever runs out first wins. The cards you play go here in the middle.|우리는 번갈아 가면서 카드를 내. 먼저 다 낸 사람이 이겨. 낸 카드는 여기 가운데에 놓여.
