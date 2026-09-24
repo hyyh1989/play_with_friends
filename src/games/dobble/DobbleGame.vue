@@ -392,7 +392,10 @@ function slotStyle(card: number[], slot: number) {
         </div>
 
         <div class="center-area">
-          <div class="card is-center" :class="{ shaking: centerLocked || hintPickFirst }">
+          <div
+            class="card is-center"
+            :class="{ shaking: centerLocked || hintPickFirst, sideways: mode === 'duo' }"
+          >
             <button
               v-for="(symbol, slot) in state?.center ?? []"
               :key="symbol"
@@ -589,6 +592,22 @@ function slotStyle(card: number[], slot: number) {
 .card.is-center {
   border: 3px dashed rgba(61, 44, 30, 0.22);
   background: #fffdf6;
+}
+
+/*
+ * 两个人面对面玩时，公共牌整体侧过来。
+ *
+ * 公共牌只有一个朝向，正对谁谁占便宜 —— 原来是下面那人四个图案全正、
+ * 上面那人全倒。倒过来的 emoji 对 5 岁来说明显慢一拍（🌙🍉 尤其费劲）。
+ * 侧 90° 之后两个人都是"侧着看"，完全对称，而且**侧着比倒着好认得多**。
+ * 和电脑玩时不转 —— 那时只有一个人在看，没有公平问题，让她正着看最好。
+ *
+ * ⚠️ 用 `rotate:` 这个独立属性，不能写 `transform: rotate(90deg)` ——
+ * 点错时公共牌要播一段 transform 的抖动动画，裸 transform 会把这个朝向覆盖掉
+ * （和 .pressable 栽的是同一个坑，见 CLAUDE.md）。
+ */
+.card.is-center.sideways {
+  rotate: 90deg;
 }
 
 /* 还没选就去点公共牌时，把自己那张牌整个亮一圈，指出"先点这边" */
