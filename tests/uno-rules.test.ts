@@ -92,6 +92,28 @@ describe('UNO · 牌组等级', () => {
     expect(topCard(state).kind).toBe('number')
   })
 
+  it('牌组构成和官方一致：每色 0 一张、1-9 各两张、功能牌各两张、万能牌各四张', () => {
+    const state = setup([child, bear], 4)
+    const all = [...state.drawPile, ...state.discardPile, ...Object.values(state.hands).flat()]
+
+    // 官方 UNO 共 108 张
+    expect(all).toHaveLength(108)
+
+    for (const color of COLORS) {
+      const ofColor = all.filter((c) => c.color === color)
+      expect(ofColor.filter((c) => c.kind === 'number' && c.value === 0)).toHaveLength(1)
+      for (let v = 1; v <= 9; v++) {
+        // 用户实测看到"连续两张绿色的3"，这是对的：非 0 数字每色两张
+        expect(ofColor.filter((c) => c.kind === 'number' && c.value === v)).toHaveLength(2)
+      }
+      for (const kind of ['skip', 'reverse', 'draw2'] as const) {
+        expect(ofColor.filter((c) => c.kind === kind)).toHaveLength(2)
+      }
+    }
+    expect(all.filter((c) => c.kind === 'wild')).toHaveLength(4)
+    expect(all.filter((c) => c.kind === 'wild4')).toHaveLength(4)
+  })
+
   it('同一个 seed 发出同样的牌', () => {
     expect(setup([child, bear], 4, 7).hands).toEqual(setup([child, bear], 4, 7).hands)
     expect(setup([child, bear], 4, 7).hands).not.toEqual(setup([child, bear], 4, 8).hands)

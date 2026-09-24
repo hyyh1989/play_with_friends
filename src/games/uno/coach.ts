@@ -33,6 +33,7 @@ export type HintId =
   | 'colorChanged'
   | 'skip'
   | 'reverse'
+  | 'reverse2'
   | 'draw2'
 
 export interface Hint {

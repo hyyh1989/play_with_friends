@@ -262,23 +262,35 @@ function skipIntroBeat() {
  * 出完牌之后的旁白：说"刚才发生了什么"，不是"该点哪里"。
  * 每句只说一次，说完就记下。用独立定时器，别被 clearTimers 清掉。
  */
-function narrateAfterPlay(before: UnoState, card: Card) {
+function narrateAfterPlay(before: UnoState, card: Card, byChild: boolean) {
   if (!settings.tutorialEnabled) return
   const seen = (id: string) => (settings.coachProgress[id as never] ?? 0) > 0
   const mark = (id: string) => {
     settings.coachProgress = { ...settings.coachProgress, [id]: MASTERY }
   }
 
+  /*
+   * 功能牌的效果【谁出的都要讲】—— 对手先甩出一张轮空牌，孩子同样需要知道
+   * 刚才发生了什么（用户实测提的）。只有"你出的牌放这儿了""颜色变了"
+   * 这类关于她自己操作的话，才限定她自己出牌时讲。
+   */
   let line: string | null = null
   if (card.kind === 'skip' && !seen('skip')) {
     line = 'uno.skip'
     mark('skip')
-  } else if (card.kind === 'reverse' && !seen('reverse')) {
-    line = 'uno.reverse'
-    mark('reverse')
+  } else if (card.kind === 'reverse') {
+    // 两人局里反转等于轮空，效果完全不同，得分开讲
+    const twoPlayers = before.players.length === 2
+    const id = twoPlayers ? 'reverse2' : 'reverse'
+    if (!seen(id)) {
+      line = `uno.${id}`
+      mark(id)
+    }
   } else if (card.kind === 'draw2' && !seen('draw2')) {
     line = 'uno.draw2'
     mark('draw2')
+  } else if (!byChild) {
+    return
   } else if (card.color && card.color !== before.activeColor && !seen('colorChanged')) {
     // 出了同数字不同色的牌 —— 颜色跟着变了，这一点孩子看不出来
     line = 'uno.colorChanged'
@@ -429,8 +441,8 @@ watch(
     if (event?.type === 'play') {
       playSfx('flip')
       flyCard(anchorOf(event.playerId), discardEl.value, { card: event.card })
-      if (event.playerId === 'child' && previousState) {
-        narrateAfterPlay(previousState, event.card)
+      if (previousState) {
+        narrateAfterPlay(previousState, event.card, event.playerId === 'child')
       }
     }
     if (event?.type === 'draw') {

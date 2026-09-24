@@ -56,9 +56,10 @@ uno.match.blue|这张也是蓝色的，和中间的一样，点它就可以出�
 uno.matchNumber|看，数字一样，颜色不一样也可以出。出了之后，颜色就变成这张的颜色啦。|Look, the number is the same. You can play it even if the colour is different. After that, the colour changes to this card.|봐, 숫자가 같지? 색이 달라도 낼 수 있어. 내고 나면 색이 이 카드 색으로 바뀌어.
 uno.mustDraw|都出不了？那就从这里摸一张。|Nothing you can play? Then take one card from here.|낼 카드가 없어? 그럼 여기서 한 장 가져와.
 uno.wildColor|这张牌可以变成任何颜色。你想要哪个颜色？|This card can become any colour. Which colour do you want?|이 카드는 아무 색이나 될 수 있어. 무슨 색으로 할까?
-uno.skip|出了这张，下一个人就轮空啦。|Play this one and the next player is skipped.|이걸 내면 다음 사람은 건너뛰어.
-uno.reverse|方向反过来了。|Now we go the other way round.|방향이 반대로 바뀌었어.
-uno.draw2|下一个人要摸两张牌。|The next player takes two cards.|다음 사람은 두 장 가져가.
+uno.skip|这是轮空牌。下一个人不能出牌了，他少了一次出牌的机会。|This is a skip card. The next player cannot play. They lose their turn.|이건 건너뛰기 카드야. 다음 사람은 카드를 못 내. 한 번 쉬는 거야.
+uno.reverse|出牌的顺序换方向了，现在反着轮。|The order has turned around. Now we go the other way.|순서가 반대로 바뀌었어. 이제 거꾸로 돌아가.
+uno.reverse2|顺序换了方向。只有两个人的时候，对手就轮空，所以可以再出一张。|The order turns around. With only two players, the other one is skipped, so you can play again.|순서가 바뀌었어. 두 명일 때는 상대가 건너뛰니까 한 번 더 낼 수 있어.
+uno.draw2|下一个人要摸两张牌，而且这一轮不能出牌。|The next player takes two cards, and cannot play this turn.|다음 사람은 두 장 가져가고, 이번에는 카드를 못 내.
 uno.tryThis|点这张试试看。|Try tapping this one.|이걸 한번 눌러 볼까?
 uno.wellDone|真棒！|Well done!|잘했어!
 uno.win|牌都出完啦，你赢了！|All your cards are gone. You win!|카드를 다 냈어. 네가 이겼어!
