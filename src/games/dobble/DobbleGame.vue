@@ -365,15 +365,12 @@ function slotStyle(card: number[], slot: number) {
             >
               <span class="pip-inner">
                 <span class="pip-face">{{ symbolOf(symbol) }}</span>
-                <!-- 选中的限时：一圈安静收缩的绿环，不出数字不出声 -->
-                <svg
+                <!-- 选中的限时：一圈绿环慢慢收拢到图案上，不出数字不出声 -->
+                <span
                   v-if="pickOf(seat.player!.id)?.symbol === symbol && !flash"
                   class="pick-ring"
-                  viewBox="0 0 100 100"
                   aria-hidden="true"
-                >
-                  <circle cx="50" cy="50" r="45" />
-                </svg>
+                />
               </span>
             </button>
           </div>
@@ -682,29 +679,31 @@ function slotStyle(card: number[], slot: number) {
   box-shadow: 0 0 0 5px rgba(6, 214, 160, 0.35);
 }
 
-/* 限时环：安静地收缩，不出数字、不出声（铁律 4：不做倒计时压力） */
+/*
+ * 限时环：一圈绿环从外面慢慢收拢到图案上，收到贴着图案时这次选中就过期了。
+ * 不出数字、不出声（铁律 4：不做倒计时压力）。
+ *
+ * 第一版做成"圆环沿着圈慢慢擦掉"（stroke-dashoffset），看起来像个转圈的加载中，
+ * 而且压在图案上 —— 用户实测说"很突兀、和图案重叠了"。收缩读起来是"时间在收拢"，
+ * 而且终点正好落在选中那圈绿边上，收完就跟它合成一个。
+ */
 .pick-ring {
   position: absolute;
-  inset: -10%;
+  inset: 0;
+  border: 3px solid var(--accent-2);
+  border-radius: 50%;
   pointer-events: none;
-  transform: rotate(-90deg);
+  animation: ring-close 3500ms linear forwards;
 }
 
-.pick-ring circle {
-  fill: none;
-  stroke: var(--accent-2);
-  stroke-width: 6;
-  stroke-linecap: round;
-  stroke-dasharray: 283;
-  animation: ring-drain 3500ms linear forwards;
-}
-
-@keyframes ring-drain {
+@keyframes ring-close {
   from {
-    stroke-dashoffset: 0;
+    scale: 1.45;
+    opacity: 0.4;
   }
   to {
-    stroke-dashoffset: 283;
+    scale: 1;
+    opacity: 1;
   }
 }
 

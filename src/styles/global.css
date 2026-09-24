@@ -64,11 +64,26 @@ button {
 }
 
 /* 所有可点元素的通用按下反馈：立即、明显（设计原则 2） */
+/*
+ * 按下去缩一点。
+ *
+ * ⚠️ 用 `scale:` 这个**独立属性**，不能写 `transform: scale(...)` ——
+ * 裸的 transform 会把元素自己用来定位的 transform 整个覆盖掉。
+ * 实测中招（2026-09-24）：找相同的图案用 `transform: translate(-50%,-50%)` 定位，
+ * 鼠标按下的一瞬间按钮跳开约 50px，光标落到了按钮外面 →
+ * **mouseup 落在别的元素上，click 根本不触发**。
+ * 表现就是"点了一下，它动一下，然后没反应"。
+ * 触屏不会中招（点击目标在 touchstart 时就定下来了），所以只在鼠标上必现。
+ *
+ * `scale`/`rotate`/`translate` 是和 transform 并列的独立属性，会叠加而不是覆盖。
+ */
 .pressable {
-  transition: transform 80ms ease-out, filter 80ms ease-out;
+  transition:
+    scale 80ms ease-out,
+    filter 80ms ease-out;
 }
 .pressable:active {
-  transform: scale(0.94);
+  scale: 0.94;
   filter: brightness(1.05);
 }
 
