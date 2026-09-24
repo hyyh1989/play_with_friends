@@ -55,7 +55,8 @@ uno.match.green|这张也是绿色的，和中间的一样，点它就可以出�
 uno.match.blue|这张也是蓝色的，和中间的一样，点它就可以出。|This one is blue too, just like the middle card. Tap it to play it.|이 카드도 파란색이야. 가운데 카드랑 같아. 눌러서 내 보자.
 uno.matchNumber|看，数字一样，颜色不一样也可以出。出了之后，颜色就变成这张的颜色啦。|Look, the number is the same. You can play it even if the colour is different. After that, the colour changes to this card.|봐, 숫자가 같지? 색이 달라도 낼 수 있어. 내고 나면 색이 이 카드 색으로 바뀌어.
 uno.mustDraw|都出不了？那就从这里摸一张。|Nothing you can play? Then take one card from here.|낼 카드가 없어? 그럼 여기서 한 장 가져와.
-uno.wildColor|这张牌可以变成任何颜色。你想要哪个颜色？|This card can become any colour. Which colour do you want?|이 카드는 아무 색이나 될 수 있어. 무슨 색으로 할까?
+uno.wild|这是万能牌。你随时可以出这张牌，出牌之后，由你来指定它变成什么颜色。|This is a wild card. You can play it at any time, and then you choose what colour it becomes.|이건 만능 카드야. 언제든지 낼 수 있고, 무슨 색이 될지 네가 정해.
+uno.wild4|这是万能加四。你随时可以出这张牌，出牌之后由你指定颜色，而且下一个人要摸四张牌，并且不能出牌。|This is a wild draw four. You can play it any time and choose the colour, and the next player takes four cards and cannot play.|이건 만능 플러스 포야. 언제든지 낼 수 있고 색도 네가 정해. 그리고 다음 사람은 네 장 가져가고 카드를 못 내.
 uno.skip|这是轮空牌。下一个人不能出牌了，他少了一次出牌的机会。|This is a skip card. The next player cannot play. They lose their turn.|이건 건너뛰기 카드야. 다음 사람은 카드를 못 내. 한 번 쉬는 거야.
 uno.reverse|出牌的顺序换方向了，现在反着轮。|The order has turned around. Now we go the other way.|순서가 반대로 바뀌었어. 이제 거꾸로 돌아가.
 uno.reverse2|顺序换了方向。只有两个人的时候，对手就轮空，所以可以再出一张。|The order turns around. With only two players, the other one is skipped, so you can play again.|순서가 바뀌었어. 두 명일 때는 상대가 건너뛰니까 한 번 더 낼 수 있어.

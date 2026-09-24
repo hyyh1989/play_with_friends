@@ -133,10 +133,11 @@ describe('教学引导 · 熟练度', () => {
     expect(recordSuccess({}, state, card('number', 'blue', 1)).numberMatch).toBe(1)
   })
 
-  it('抽牌记到 mustDraw，出万能牌记到 wildColor', () => {
+  it('抽牌记到 mustDraw；万能牌不计入教学局的熟练度', () => {
     const state = rig([], card('number', 'red', 1))
     expect(recordSuccess({}, state, null).mustDraw).toBe(1)
-    expect(recordSuccess({}, state, card('wild', null)).wildColor).toBe(1)
+    // 万能牌走正常对局里的随堂讲解，不参与教学局的完成判定
+    expect(recordSuccess({}, state, card('wild', null))).toEqual({})
   })
 
   it('累计到 MASTERY 就算掌握', () => {
@@ -148,14 +149,13 @@ describe('教学引导 · 熟练度', () => {
     expect(isMastered(progress, 'colorMatch')).toBe(true)
   })
 
-  it('四条规则都掌握了才算全部学会', () => {
-    const almost: CoachProgress = {
-      colorMatch: MASTERY,
-      numberMatch: MASTERY,
-      mustDraw: MASTERY,
-    }
-    expect(allMastered(almost)).toBe(false)
-    expect(allMastered({ ...almost, wildColor: MASTERY })).toBe(true)
+  it('教学局真正教的三条都掌握了，才算学完', () => {
+    // 教学那副牌是纯数字的，只会教到这三条。
+    // 原来把万能牌也算进来，结果 L1 的孩子永远凑不齐、会被无限次追问
+    expect(allMastered({ colorMatch: MASTERY, numberMatch: MASTERY })).toBe(false)
+    expect(
+      allMastered({ colorMatch: MASTERY, numberMatch: MASTERY, mustDraw: MASTERY }),
+    ).toBe(true)
   })
 
   it('不会改传进去的进度对象', () => {

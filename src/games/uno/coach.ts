@@ -25,7 +25,8 @@ export type HintId =
   | 'colorMatch'
   | 'numberMatch'
   | 'mustDraw'
-  | 'wildColor'
+  | 'wild'
+  | 'wild4'
   | 'opponentCount'
   | 'opponentDrew'
   // 出牌之后的旁白（不是"该点哪里"，是"刚才发生了什么"）
@@ -57,9 +58,16 @@ export function isMastered(progress: CoachProgress, id: HintId): boolean {
   return (progress[id] ?? 0) >= MASTERY
 }
 
-/** 全部学完了就不用再教了 */
+/**
+ * 教学局教完了没有。
+ *
+ * 只看教学那副牌真正会教到的三条 —— 它是纯数字牌，不含功能牌。
+ * 原来把万能牌也算进来，结果 L1 的孩子永远碰不到万能牌、这三个字永远凑不齐，
+ * 进 UNO 会被无限次问"要我教你吗"。功能牌和万能牌走正常对局里的随堂讲解，
+ * 不该拿来卡教学局的完成判定。
+ */
 export function allMastered(progress: CoachProgress): boolean {
-  const ids: HintId[] = ['colorMatch', 'numberMatch', 'mustDraw', 'wildColor']
+  const ids: HintId[] = ['colorMatch', 'numberMatch', 'mustDraw']
   return ids.every((id) => isMastered(progress, id))
 }
 
@@ -168,10 +176,8 @@ export function recordSuccess(
     bump('mustDraw')
     return next
   }
-  if (played.kind === 'wild' || played.kind === 'wild4') {
-    bump('wildColor')
-    return next
-  }
+  // 万能牌走随堂讲解，不计入教学局的熟练度
+  if (played.kind === 'wild' || played.kind === 'wild4') return next
   if (played.color === state.activeColor) bump('colorMatch')
   else bump('numberMatch')
   return next

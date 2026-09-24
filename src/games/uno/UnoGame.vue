@@ -289,6 +289,12 @@ function narrateAfterPlay(before: UnoState, card: Card, byChild: boolean) {
   } else if (card.kind === 'draw2' && !seen('draw2')) {
     line = 'uno.draw2'
     mark('draw2')
+  } else if (card.kind === 'wild4' && !seen('wild4')) {
+    line = 'uno.wild4'
+    mark('wild4')
+  } else if (card.kind === 'wild' && !seen('wild')) {
+    line = 'uno.wild'
+    mark('wild')
   } else if (!byChild) {
     return
   } else if (card.color && card.color !== before.activeColor && !seen('colorChanged')) {
@@ -317,16 +323,6 @@ function evaluateHint() {
   if (introBeat.value !== null) return
   if (!coachOn.value || !state.value || finished.value || !myTurn.value) {
     setHint(null)
-    return
-  }
-  // 万能牌的选色弹层单独提示
-  if (pendingWildId.value) {
-    setHint({
-      id: 'wildColor',
-      target: { kind: 'colors' },
-      voice: 'uno.wildColor',
-      first: (settings.coachProgress.wildColor ?? 0) === 0,
-    })
     return
   }
   setHint(nextHint(state.value, settings.coachProgress, Date.now() - turnStartedAt, IDLE_MS))
@@ -402,6 +398,23 @@ function tapCard(card: Card) {
   }
   dispatch({ type: 'play', cardId: card.id })
 }
+
+/*
+ * 万能牌的讲解挂在"选色弹层打开"这一刻，而且【不依赖教学模式】——
+ * 教学那副牌是纯数字的，万能牌只会在正常对局里遇到。
+ * 原来它写在教练里，等于永远触发不到（用户实测发现）。
+ */
+watch(pendingWildId, (id) => {
+  if (!id || !settings.tutorialEnabled) return
+  const card = myHand.value.find((c) => c.id === id)
+  if (!card) return
+  const key = card.kind === 'wild4' ? 'wild4' : 'wild'
+  if ((settings.coachProgress[key] ?? 0) > 0) return
+  settings.coachProgress = { ...settings.coachProgress, [key]: MASTERY }
+  hint.value = { id: key, target: { kind: 'colors' }, voice: `uno.${key}`, first: true }
+  clearTimeout(narrateTimer)
+  narrateTimer = window.setTimeout(() => void speak(`uno.${key}`), 200)
+})
 
 function chooseColor(color: CardColor) {
   const cardId = pendingWildId.value
