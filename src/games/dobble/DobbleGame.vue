@@ -18,10 +18,17 @@ import {
 import { aiDelay, chooseAiAction } from './ai'
 import { symbolOf } from './symbols'
 
-/** 点对了以后，先把那个图案亮出来给孩子看清，再换下一局 */
-const ROUND_FLASH_MS = 1100
-/** 点错了冻结多久。太长会让人以为坏了，太短等于可以乱按 */
-const WRONG_LOCK_MS = 700
+/** 对上了以后，先把那个图案亮出来给孩子看清，再换下一局 */
+const ROUND_FLASH_MS = 1200
+/**
+ * 选中之后有多久可以去点公共牌。
+ *
+ * 铁律 4 说"不做倒计时压力"，所以这里**不出数字、不出声**，
+ * 只有一圈安静收缩的绿环，时间到了就悄悄取消。3.5 秒是给 5 岁的手留的余量。
+ */
+const PICK_WINDOW_MS = 3500
+/** 公共牌被点错之后短暂不可点，让"乱按"讨不到便宜 */
+const MISS_LOCK_MS = 600
 
 const router = useRouter()
 const settings = useSettingsStore()
@@ -31,36 +38,44 @@ const mode = ref<'ai' | 'duo'>('ai')
 const order = ref<DobbleOrder>(3)
 const state = shallowRef<DobbleState | null>(null)
 const showResult = ref(false)
-/** 正在亮的那个答案；亮着的时候谁都不能点 */
+/** 对上了正在展示的那一下；展示期间谁都不能点 */
 const flash = ref<{ symbol: number; playerId: string } | null>(null)
-/** 刚点错、正被冻结的人 */
-const locked = ref<Record<string, boolean>>({})
+/** 公共牌刚被点错，短暂冻结 */
+const centerLocked = ref(false)
+/** 刚点了公共牌却谁都没选 —— 用来提示"先点自己那张" */
+const hintPickFirst = ref(false)
 
 let timers: number[] = []
 function later(fn: () => void, ms: number) {
   timers.push(window.setTimeout(fn, ms))
 }
 /**
- * AI 的闹钟单独拿出来存一个，而不是丢进 timers 里。
- * 因为"该给 AI 定闹钟了"会从两个地方触发（换了新牌 / 它点错后解冻），
- * 不去重的话它会同时挂两个闹钟，一轮里连点两下。
+ * AI 的闹钟和"选中限时"各自单独存一个，而不是丢进 timers。
+ * 这两个都需要"重新定一次就把上一个撤掉"，混在一起会同时挂好几个。
  */
 let aiTimer: number | null = null
+let pickTimers: Record<string, number> = {}
 function clearAiTimer() {
   if (aiTimer !== null) clearTimeout(aiTimer)
   aiTimer = null
+}
+function clearPickTimer(playerId: string) {
+  if (pickTimers[playerId] !== undefined) clearTimeout(pickTimers[playerId])
+  delete pickTimers[playerId]
 }
 function clearTimers() {
   timers.forEach(clearTimeout)
   timers = []
   clearAiTimer()
+  Object.keys(pickTimers).forEach(clearPickTimer)
+  pickTimers = {}
 }
 onUnmounted(clearTimers)
 
 const aiAvatar = AI_AVATARS[0]
 const friendAvatar = computed(() => AVATARS.find((a) => a !== settings.avatar) ?? AVATARS[1])
 
-/** 上面那个座位的人。两个人玩时他的牌要转 180°，因为他坐在对面 */
+/** 对面那个人的整半边要转 180°，因为他坐在桌子对面 */
 const seats = computed(() => {
   const players = state.value?.players ?? []
   return [
@@ -69,13 +84,9 @@ const seats = computed(() => {
   ].filter((s) => s.player)
 })
 
-function cardOf(playerId: string): number[] {
-  return state.value?.cards[playerId] ?? []
-}
-
-function scoreOf(playerId: string): number {
-  return state.value?.scores[playerId] ?? 0
-}
+const cardOf = (playerId: string) => state.value?.cards[playerId] ?? []
+const scoreOf = (playerId: string) => state.value?.scores[playerId] ?? 0
+const pickOf = (playerId: string) => state.value?.picks[playerId] ?? null
 
 function start() {
   const players: PlayerRef[] = [{ id: 'child', kind: 'human', avatar: settings.avatar }]
@@ -87,7 +98,8 @@ function start() {
   clearTimers()
   showResult.value = false
   flash.value = null
-  locked.value = {}
+  centerLocked.value = false
+  hintPickFirst.value = false
   state.value = createInitialState({
     players,
     difficulty: settings.difficulty,
@@ -101,47 +113,78 @@ function start() {
 function dispatch(action: DobbleAction) {
   const current = state.value
   if (!current || flash.value || isFinished(current)) return
-  if (locked.value[action.playerId]) return
 
   const next = applyAction(current, action)
   if (next === current) return
+  const result = next.feedback
 
-  if (!next.lastTap?.correct) {
-    // 点错了：抖一下 + 冻结一会儿，不扣分、不换牌
-    playSfx('nope')
-    state.value = next
-    locked.value = { ...locked.value, [action.playerId]: true }
+  if (result?.kind === 'hit') {
+    // 对上了：先把答案亮出来，亮完再换牌
+    playSfx('success')
+    flash.value = { symbol: result.symbol, playerId: result.playerId! }
+    clearAiTimer()
+    Object.keys(pickTimers).forEach(clearPickTimer)
     later(() => {
-      locked.value = { ...locked.value, [action.playerId]: false }
-      scheduleAi()
-    }, WRONG_LOCK_MS)
+      flash.value = null
+      state.value = next
+    }, ROUND_FLASH_MS)
     return
   }
 
-  // 点对了：先把答案亮出来，亮完再换牌
-  playSfx('success')
-  flash.value = { symbol: action.symbol, playerId: action.playerId }
-  later(() => {
-    flash.value = null
-    locked.value = {}
-    state.value = next
-  }, ROUND_FLASH_MS)
+  state.value = next
+
+  if (result?.kind === 'pick') {
+    playSfx('tap')
+    // 选中有时限：到点了安静地取消，不出声、不报错
+    const who = result.playerId!
+    clearPickTimer(who)
+    pickTimers[who] = window.setTimeout(() => {
+      delete pickTimers[who]
+      dispatch({ type: 'clear', playerId: who })
+    }, PICK_WINDOW_MS)
+    return
+  }
+
+  if (result?.kind === 'miss') {
+    playSfx('nope')
+    centerLocked.value = true
+    later(() => (centerLocked.value = false), MISS_LOCK_MS)
+    return
+  }
+
+  if (result?.kind === 'needPick') {
+    // 还没选就来点公共牌：抖一下公共牌，同时把自己那张牌整个亮一圈，指出方向
+    playSfx('nope')
+    hintPickFirst.value = true
+    later(() => (hintPickFirst.value = false), 1100)
+  }
 }
 
-function tapSymbol(playerId: string, symbol: number) {
+/** 点自己（或对面那个人）的牌 = 选中 */
+function tapOwn(playerId: string, symbol: number) {
   const player = state.value?.players.find((p) => p.id === playerId)
-  // AI 那半边不给人点 —— 不然孩子替对手按了
+  // 电脑那张牌不给人点 —— 不然孩子替对手按了
   if (player?.kind !== 'human') return
-  dispatch({ type: 'tap', playerId, symbol })
+  dispatch({ type: 'pick', playerId, symbol })
 }
 
-/** 给 AI 定一个"想一会儿"的闹钟。它总能找到答案，慢才是它的难度 */
+/**
+ * 点中间的公共牌 = 确认。
+ *
+ * 不用判断是谁按的 —— 规则按"这一下对上了谁选中的那个"来认领。
+ * 公共牌是两个人共用的，屏幕本来也分不清手指是谁的。
+ */
+function tapCenter(symbol: number) {
+  if (centerLocked.value) return
+  dispatch({ type: 'confirm', symbol })
+}
+
 function scheduleAi() {
   clearAiTimer()
   const current = state.value
   if (!current || isFinished(current) || flash.value) return
   const ai = current.players.find((p) => p.kind === 'ai')
-  if (!ai || locked.value[ai.id]) return
+  if (!ai) return
 
   aiTimer = window.setTimeout(() => {
     aiTimer = null
@@ -149,7 +192,7 @@ function scheduleAi() {
     if (!now || now !== current || flash.value || isFinished(now)) return
     const action = chooseAiAction(now, ai.id, settings.difficulty)
     if (action) dispatch(action)
-  }, aiDelay(current, settings.difficulty))
+  }, aiDelay(current, ai.id, settings.difficulty))
 }
 
 watch(state, (current) => {
@@ -167,37 +210,74 @@ function goHome() {
 }
 
 /**
- * 图案摆在牌上的位置。
+ * 图案摆在牌上的位置 + 每个能点多大的范围。
  *
- * 不能整整齐齐排一圈 —— 那样孩子会靠"第几个位置"去比对，而不是真的在看图案。
- * 所以角度、半径、大小、旋转都按【这张牌 + 第几个图案】算一个固定的抖动：
- * 同一张牌每次出现长得一模一样（可预期），不同的牌则各不相同。
+ * 两条要求会打架：
+ *   ① 位置要抖动 —— 整整齐齐排一圈的话，孩子会靠"第几个位置"去比对，而不是真的在看图案
+ *   ② 可点范围要尽量大（铁律 2），但**绝不能互相压住**
+ *
+ * ⚠️ 压住过一次，而且很难发现：可点区是绝对定位的方块，重叠的地方归**后画的那个**。
+ * 孩子瞄准一个图案、点在它边上，事件被邻居接走 → 判成点错 → 只是灰一下。
+ * 从她的角度就是"我明明点对了，它抖一下就没反应了"（2026-09-24 用户实测反馈）。
+ *
+ * 所以可点范围不写死尺寸，而是**按这张牌的实际布局算**：
+ * 每个图案的可点直径 = 它到最近邻居的距离。这样重叠在数学上就不可能发生。
  */
+interface Spot {
+  x: number
+  y: number
+  hit: number
+}
+
 function jitter(card: number[], slot: number, salt: number): number {
-  let h = card.reduce((acc, s) => acc * 31 + s, 7) * 374761393 + slot * 668265263 + salt * 2246822519
+  let h =
+    card.reduce((acc, s) => acc * 31 + s, 7) * 374761393 + slot * 668265263 + salt * 2246822519
   h = Math.imul(h ^ (h >>> 13), 1274126177)
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296
 }
 
-function slotStyle(card: number[], slot: number) {
+/** 一张牌的完整布局。坐标和尺寸都是"占牌直径的几分之几" */
+function layoutOf(card: number[]): Spot[] {
   const n = card.length
-  // 5 个以上就中间放一个，否则一圈太挤
-  const ringCount = n >= 5 ? n - 1 : n
-  const onRing = n < 5 || slot > 0
-  const ringIndex = n >= 5 ? slot - 1 : slot
+  /*
+   * 5 个以上就往中间放一个，剩下的排一圈。
+   * 全排一圈的话 6 个挨得太近，要么可点范围被压小，要么只能把圈撑大 ——
+   * 撑大之后"对上了"的绿圈会戳到牌外面去（实测超出 17px）。
+   */
+  const hasCenter = n >= 5
+  const ringCount = hasCenter ? n - 1 : n
+  const baseRadius = 0.3
+  const share = (Math.PI * 2) / ringCount
 
-  const angle = onRing
-    ? (ringIndex / ringCount) * Math.PI * 2 + (jitter(card, slot, 1) - 0.5) * 0.5
-    : 0
-  const radius = onRing ? 0.31 + (jitter(card, slot, 2) - 0.5) * 0.06 : 0
-  const scale = 0.85 + jitter(card, slot, 3) * 0.32
-  const spin = (jitter(card, slot, 4) - 0.5) * 44
+  const spots = card.map((_, slot) => {
+    if (hasCenter && slot === 0) return { x: 0, y: 0, hit: 0 }
+    const ringIndex = hasCenter ? slot - 1 : slot
+    // 抖动只在自己那一格角度里晃，所以两个邻居最多把间距压掉一个固定比例
+    const angle = ringIndex * share + (jitter(card, slot, 1) - 0.5) * share * 0.24
+    const radius = baseRadius + jitter(card, slot, 2) * 0.03
+    return { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius, hit: 0 }
+  })
 
+  spots.forEach((spot, i) => {
+    // 到最近邻居的距离 = 可点直径的上限；0.42 是不越过牌边的上限
+    let nearest = 0.42
+    spots.forEach((other, j) => {
+      if (i !== j) nearest = Math.min(nearest, Math.hypot(spot.x - other.x, spot.y - other.y))
+    })
+    spot.hit = nearest
+  })
+
+  return spots
+}
+
+function slotStyle(card: number[], slot: number) {
+  const spot = layoutOf(card)[slot]
   return {
-    left: `${50 + Math.cos(angle) * radius * 100}%`,
-    top: `${50 + Math.sin(angle) * radius * 100}%`,
-    '--spin': `${spin}deg`,
-    '--scale': String(scale),
+    left: `${50 + spot.x * 100}%`,
+    top: `${50 + spot.y * 100}%`,
+    '--hit': `${spot.hit * 100}cqw`,
+    '--spin': `${(jitter(card, slot, 4) - 0.5) * 44}deg`,
+    '--scale': String(0.85 + jitter(card, slot, 3) * 0.32),
   }
 }
 </script>
@@ -206,14 +286,14 @@ function slotStyle(card: number[], slot: number) {
   <div v-if="phase === 'setup'" class="setup safe-area">
     <button class="corner-back pressable" :aria-label="$t('common.back')" @click="goHome">←</button>
 
-    <!-- 规则示意：两张牌，圈出同一个图案。不用文字 -->
+    <!-- 规则示意：自己牌上点一个 → 公共牌上点同一个。不用文字 -->
     <div class="how">
       <span class="how-card">
         <span class="how-pip">🐻</span><span class="how-pip target">⭐</span
         ><span class="how-pip">🚗</span>
       </span>
-      <span class="how-eq">=</span>
-      <span class="how-card">
+      <span class="how-arrow">→</span>
+      <span class="how-card is-center">
         <span class="how-pip">🍎</span><span class="how-pip target">⭐</span
         ><span class="how-pip">⚽</span>
       </span>
@@ -246,7 +326,7 @@ function slotStyle(card: number[], slot: number) {
       </button>
     </div>
 
-    <!-- 每张牌几个图案。方块随图案数长大，不认字也看得出哪个更难 -->
+    <!-- 每张牌几个图案。点点的个数就是图案数，不认字也看得出哪个更难 -->
     <div class="sizes">
       <button
         v-for="opt in [2, 3, 5] as DobbleOrder[]"
@@ -268,43 +348,75 @@ function slotStyle(card: number[], slot: number) {
   <div v-else class="game safe-area">
     <button class="exit-btn pressable" :aria-label="$t('common.back')" @click="goHome">←</button>
 
-    <div
-      v-for="seat in seats"
-      :key="seat.player!.id"
-      class="seat"
-      :class="{ flipped: seat.flipped, locked: locked[seat.player!.id] }"
-    >
-      <div class="card-area">
-        <div class="card">
-          <button
-            v-for="(symbol, slot) in cardOf(seat.player!.id)"
-            :key="symbol"
-            class="pip pressable"
-            :class="{
-              hit: flash?.symbol === symbol,
-              missed:
-                state?.lastTap?.playerId === seat.player!.id &&
-                state?.lastTap?.symbol === symbol &&
-                !state?.lastTap?.correct,
-            }"
-            :style="slotStyle(cardOf(seat.player!.id), slot)"
-            :disabled="!!flash || locked[seat.player!.id]"
-            :aria-label="String(symbol)"
-            @click="tapSymbol(seat.player!.id, symbol)"
-          >
-            <span class="pip-face">{{ symbolOf(symbol) }}</span>
-          </button>
+    <template v-for="(seat, index) in seats" :key="seat.player!.id">
+      <!-- 上面那半边 → 中间公共牌 → 下面那半边 -->
+      <div class="seat" :class="{ flipped: seat.flipped }">
+        <div class="card-area">
+          <div class="card" :class="{ 'hint-me': hintPickFirst && seat.player!.kind === 'human' }">
+            <button
+              v-for="(symbol, slot) in cardOf(seat.player!.id)"
+              :key="symbol"
+              class="pip pressable"
+              :class="{
+                picked: pickOf(seat.player!.id)?.symbol === symbol,
+                hit: flash?.symbol === symbol,
+              }"
+              :style="slotStyle(cardOf(seat.player!.id), slot)"
+              :disabled="!!flash"
+              :aria-label="String(symbol)"
+              @click="tapOwn(seat.player!.id, symbol)"
+            >
+              <span class="pip-inner">
+                <span class="pip-face">{{ symbolOf(symbol) }}</span>
+                <!-- 选中的限时：一圈安静收缩的绿环，不出数字不出声 -->
+                <svg
+                  v-if="pickOf(seat.player!.id)?.symbol === symbol && !flash"
+                  class="pick-ring"
+                  viewBox="0 0 100 100"
+                  aria-hidden="true"
+                >
+                  <circle cx="50" cy="50" r="45" />
+                </svg>
+              </span>
+            </button>
+          </div>
         </div>
       </div>
 
-      <!-- 比分：几个点点，亮一个就是得一分 -->
-      <div class="score">
-        <span class="score-face">{{ seat.player!.avatar }}</span>
-        <span class="pips">
-          <i v-for="k in TARGET_SCORE" :key="k" :class="{ on: k <= scoreOf(seat.player!.id) }" />
-        </span>
+      <!-- 公共牌夹在两个座位之间；比分放它两边，用掉横屏空出来的地方 -->
+      <div v-if="index === 0" class="middle">
+        <div
+          v-for="p in state?.players ?? []"
+          :key="`s${p.id}`"
+          class="score"
+          :class="{ flipped: mode === 'duo' && p.id !== 'child' }"
+        >
+          <span class="score-face">{{ p.avatar }}</span>
+          <span class="pips">
+            <i v-for="k in TARGET_SCORE" :key="k" :class="{ on: k <= scoreOf(p.id) }" />
+          </span>
+        </div>
+
+        <div class="center-area">
+          <div class="card is-center" :class="{ shaking: centerLocked || hintPickFirst }">
+            <button
+              v-for="(symbol, slot) in state?.center ?? []"
+              :key="symbol"
+              class="pip pressable"
+              :class="{ hit: flash?.symbol === symbol }"
+              :style="slotStyle(state?.center ?? [], slot)"
+              :disabled="!!flash || centerLocked"
+              :aria-label="String(symbol)"
+              @click="tapCenter(symbol)"
+            >
+              <span class="pip-inner">
+                <span class="pip-face">{{ symbolOf(symbol) }}</span>
+              </span>
+            </button>
+          </div>
+        </div>
       </div>
-    </div>
+    </template>
 
     <GameResult
       v-if="showResult && state"
@@ -328,7 +440,7 @@ function slotStyle(card: number[], slot: number) {
   height: 100%;
 }
 
-/* ── 规则示意：两张小牌 + 中间一个等号，同一个图案被圈出来 ── */
+/* ── 规则示意：自己的牌 → 公共牌，同一个图案被圈出来 ── */
 .how {
   display: flex;
   align-items: center;
@@ -343,6 +455,11 @@ function slotStyle(card: number[], slot: number) {
   background: var(--bg-card);
   border-radius: 999px;
   box-shadow: var(--shadow);
+}
+
+/* 公共牌画成有虚线边的，和游戏里一致 */
+.how-card.is-center {
+  border: 3px dashed rgba(61, 44, 30, 0.25);
 }
 
 .how-pip {
@@ -370,10 +487,10 @@ function slotStyle(card: number[], slot: number) {
   }
 }
 
-.how-eq {
-  font-size: clamp(18px, 3vmin, 30px);
+.how-arrow {
+  font-size: clamp(20px, 3.2vmin, 32px);
   font-weight: 800;
-  color: var(--ink-soft);
+  color: var(--accent-2);
 }
 
 /* ── 每张牌几个图案 ── */
@@ -398,7 +515,6 @@ function slotStyle(card: number[], slot: number) {
     var(--shadow);
 }
 
-/* 点点排成一圈，个数就是每张牌的图案数 —— 不认字也看得出哪个更满 */
 .size-dots {
   position: relative;
   display: block;
@@ -414,8 +530,7 @@ function slotStyle(card: number[], slot: number) {
   height: 22%;
   background: var(--accent-3);
   border-radius: 50%;
-  transform: translate(-50%, -50%)
-    rotate(calc(var(--k, 0) * 1turn / var(--n))) translateY(-150%);
+  transform: translate(-50%, -50%) rotate(calc(var(--k, 0) * 1turn / var(--n))) translateY(-150%);
 }
 
 .size-dots i:nth-child(1) {
@@ -437,13 +552,12 @@ function slotStyle(card: number[], slot: number) {
   --k: 5;
 }
 
-/* ── 对局 ── */
+/* ── 对局：上面一张 / 中间公共牌 / 下面一张 ── */
 .game {
   position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;
-  gap: clamp(4px, 1vmin, 12px);
 }
 
 .exit-btn {
@@ -461,39 +575,35 @@ function slotStyle(card: number[], slot: number) {
   box-shadow: var(--shadow);
 }
 
-/*
- * 一人一半。对面那个人的半边整个转 180° —— 连比分一起转，
- * 这样两个人看到的布局完全一样（牌在自己这边，比分在牌外侧）。
- */
 .seat {
   display: flex;
   flex: 1;
-  flex-direction: column;
   min-height: 0;
   align-items: center;
   justify-content: center;
-  gap: clamp(4px, 1vmin, 10px);
+  width: 100%;
 }
 
 .seat.flipped {
   transform: rotate(180deg);
 }
 
-.seat.locked .card {
-  animation: card-shake 380ms ease-in-out;
-}
-
-@keyframes card-shake {
-  0%,
-  100% {
-    transform: translateX(0);
-  }
-  25% {
-    transform: translateX(-9px) rotate(-1.5deg);
-  }
-  75% {
-    transform: translateX(9px) rotate(1.5deg);
-  }
+/*
+ * 中间这一条：公共牌居中，两个人的比分分列两边 ——
+ * 横屏时左右本来是空的，正好用掉，公共牌也就不用跟上下两张抢高度。
+ */
+.middle {
+  display: flex;
+  flex: 0 0 auto;
+  /*
+   * 34% 不是凑出来的：公共牌要大到让上面的可点区 ≥ 80px（铁律 2），
+   * 最难那档（每张 6 个图案）还要让"中心那个"和"一圈那些"不互相压住。
+   * 算下来三张牌差不多一样大，视觉上也刚好。
+   */
+  height: 34%;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(10px, 3vmin, 40px);
 }
 
 .card-area {
@@ -502,6 +612,15 @@ function slotStyle(card: number[], slot: number) {
   min-height: 0;
   place-items: center;
   width: 100%;
+  height: 100%;
+  container-type: size;
+}
+
+.center-area {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  aspect-ratio: 1;
   container-type: size;
 }
 
@@ -518,49 +637,136 @@ function slotStyle(card: number[], slot: number) {
   container-type: inline-size;
 }
 
+/* 公共牌画一圈虚线边，一眼看出"这张是大家的" */
+.card.is-center {
+  border: 3px dashed rgba(61, 44, 30, 0.22);
+  background: #fffdf6;
+}
+
+/* 还没选就去点公共牌时，把自己那张牌整个亮一圈，指出"先点这边" */
+.card.hint-me {
+  animation: hint-glow 1.1s ease-in-out;
+}
+
+@keyframes hint-glow {
+  0%,
+  100% {
+    box-shadow: var(--shadow-lg);
+  }
+  30%,
+  70% {
+    box-shadow:
+      0 0 0 8px rgba(6, 214, 160, 0.45),
+      var(--shadow-lg);
+  }
+}
+
+.card.shaking {
+  animation: card-shake 380ms ease-in-out;
+}
+
+@keyframes card-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-8px) rotate(-1.2deg);
+  }
+  75% {
+    transform: translateX(8px) rotate(1.2deg);
+  }
+}
+
 /*
- * 图案本身。可点范围比看到的大一圈（铁律 2），所以 padding 给得比较足。
- * ⚠️ 这里是绝对定位元素，**百分比 padding 会按整张牌算**，所以用 cqw
- * （四子棋踩过：padding:7% 被按包含块算成 48px，棋子塌成一个点）。
+ * 「能点多大」和「看起来多大」是两件事，必须分开：
+ *   .pip       —— 透明的可点圆盘，尺寸由 layoutOf 按邻居间距算出来，保证互不重叠。
+ *                 它可以戳出牌边一点，反正看不见。**不缩放**，一缩放就又可能压住邻居。
+ *   .pip-inner —— 看得见的那一圈（图案 + 选中/对上的绿圈），只有图案那么大，
+ *                 缩放、旋转、高亮都作用在它身上，所以绿圈永远在牌里面。
+ *
+ * ⚠️ 可点区用 border-radius 做成圆的不是为了好看 —— 浏览器的命中判定会遵守圆角，
+ * 方的可点区在斜对角会互相压住，点在图案边上会被邻居接走（用户实测中招过）。
  */
 .pip {
   position: absolute;
   display: grid;
   place-items: center;
-  min-width: 78px;
-  min-height: 78px;
-  padding: 3cqw;
+  width: var(--hit);
+  height: var(--hit);
   border-radius: 50%;
-  transform: translate(-50%, -50%) rotate(var(--spin)) scale(var(--scale));
+  transform: translate(-50%, -50%);
+}
+
+.pip-inner {
+  position: relative;
+  display: grid;
+  place-items: center;
+  padding: 2.4cqw;
+  border-radius: 50%;
+  transform: rotate(var(--spin)) scale(var(--scale));
   transition:
     transform 160ms,
-    background 160ms;
+    background 160ms,
+    box-shadow 160ms;
 }
 
 .pip-face {
-  font-size: 19cqw;
+  font-size: 18cqw;
   line-height: 1;
   font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
 }
 
-/* 点对了：绿圈亮起来并转正，让孩子看清是哪个 */
-.pip.hit {
-  background: var(--accent-2);
-  transform: translate(-50%, -50%) rotate(0deg) scale(calc(var(--scale) * 1.25));
-  box-shadow: 0 0 0 6px rgba(6, 214, 160, 0.35);
+/* 选中了：绿圈 + 转正，告诉她"我知道你选的是这个" */
+.pip.picked .pip-inner {
+  background: rgba(6, 214, 160, 0.22);
+  transform: rotate(0deg) scale(calc(var(--scale) * 1.06));
+  box-shadow: 0 0 0 4px var(--accent-2);
 }
 
-/* 点错了：灰一下就好，不做失败叙事（铁律 4） */
-.pip.missed {
-  opacity: 0.35;
+/* 对上了：两张牌上的那个一起放大亮起来，让她看清"原来是同一个" */
+.pip.hit .pip-inner {
+  background: var(--accent-2);
+  transform: rotate(0deg) scale(calc(var(--scale) * 1.14));
+  box-shadow: 0 0 0 5px rgba(6, 214, 160, 0.35);
+}
+
+/* 限时环：安静地收缩，不出数字、不出声（铁律 4：不做倒计时压力） */
+.pick-ring {
+  position: absolute;
+  inset: -10%;
+  pointer-events: none;
+  transform: rotate(-90deg);
+}
+
+.pick-ring circle {
+  fill: none;
+  stroke: var(--accent-2);
+  stroke-width: 6;
+  stroke-linecap: round;
+  stroke-dasharray: 283;
+  animation: ring-drain 3500ms linear forwards;
+}
+
+@keyframes ring-drain {
+  from {
+    stroke-dashoffset: 0;
+  }
+  to {
+    stroke-dashoffset: 283;
+  }
 }
 
 /* ── 比分 ── */
 .score {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 10px;
-  padding: 4px 12px;
+  gap: 8px;
+}
+
+.score.flipped {
+  transform: rotate(180deg);
 }
 
 .score-face {
@@ -571,6 +777,7 @@ function slotStyle(card: number[], slot: number) {
 
 .pips {
   display: flex;
+  flex-direction: column;
   gap: 6px;
 }
 
@@ -589,7 +796,8 @@ function slotStyle(card: number[], slot: number) {
 
 @media (prefers-reduced-motion: reduce) {
   .how-pip.target,
-  .seat.locked .card {
+  .card.shaking,
+  .card.hint-me {
     animation: none;
   }
 }

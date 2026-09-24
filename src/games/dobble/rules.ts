@@ -6,10 +6,19 @@ import type { GameConfig, PlayerRef } from '../../core/types'
  *
  * 整个游戏建立在一个几何事实上：**任意两张牌，恰好有且只有一个相同的图案**。
  * 这不是随机凑出来的，是"有限投影平面"的性质 —— 见 buildDeck 的注释。
- * 有了这条，游戏规则就只剩一句话：找出两张牌上一样的那个，点它。
  *
- * 和别的游戏不同，这里**没有轮次** —— 两个人同时看、同时抢。
- * 所以 currentPlayer() 恒为 null，谁都可以随时出手。
+ * 桌面上有三张牌：中间一张**公共牌**，上下各一张属于一个人。
+ * 每个人拿自己的牌去跟中间那张比，所以两个人要找的答案通常不是同一个，可以各找各的。
+ *
+ * 怎么算答对是**两步**（2026-09-24 用户实测后改的）：
+ *   1. 在【自己的牌】上点中一个图案 —— 选中，亮起来
+ *   2. 在【中间的公共牌】上点中同一个 —— 对上了，得分
+ * 原来是一步（在自己牌上点对就得分），问题是缺一个"我选的是这个"的中间状态：
+ * 点错了只是灰一下，孩子无从判断到底是自己点错了、还是系统没收到。
+ * 改成两步之后，"这两个是一样的"变成她亲手指出来的一件事，而不是系统替她判定的。
+ *
+ * 和别的游戏不同，这里**没有轮次** —— 两个人同时看、同时抢，
+ * 所以 currentPlayer() 恒为 null。
  */
 
 /**
@@ -22,6 +31,23 @@ import type { GameConfig, PlayerRef } from '../../core/types'
  */
 export type DobbleOrder = 2 | 3 | 5
 
+/** 一次操作的结果，界面靠它播反馈 */
+export type FeedbackKind =
+  /** 在自己牌上选中了 */
+  | 'pick'
+  /** 在公共牌上对上了自己选的那个 */
+  | 'hit'
+  /** 在公共牌上点的和谁选的都不一样 */
+  | 'miss'
+  /** 谁都还没选就先去点公共牌 —— 要提示"先点自己那张" */
+  | 'needPick'
+
+/** 一个人当前选中的图案。seq 用来在两人选了同一个时判定谁先 */
+export interface Pick {
+  symbol: number
+  seq: number
+}
+
 export interface DobbleState {
   players: PlayerRef[]
   order: DobbleOrder
@@ -29,19 +55,37 @@ export interface DobbleState {
   deck: number[][]
   /** 下一张要发的牌在 deck 里的下标 */
   next: number
+  /** 中间那张公共牌，两个人都拿自己的牌跟它比 */
+  center: number[]
   /** 每人面前的那张牌 */
   cards: Record<string, number[]>
+  /** 每人在自己牌上选中的那个（还没去公共牌确认） */
+  picks: Record<string, Pick | null>
+  /** 选中的先后次序，只增不减 */
+  pickSeq: number
   scores: Record<string, number>
   round: number
   /** 先到几分赢 */
   target: number
   rng: RngState
-  /** 上一次点击的结果，界面用来播对/错的反馈 */
-  lastTap: { playerId: string; symbol: number; correct: boolean } | null
+  /** 上一次操作的结果。playerId 为 null = 这一下认不出是谁点的（只会是 miss/needPick） */
+  feedback: { playerId: string | null; symbol: number; kind: FeedbackKind } | null
   winner: string | null
 }
 
-export type DobbleAction = { type: 'tap'; playerId: string; symbol: number }
+export type DobbleAction =
+  /** 点自己牌上的一个图案 */
+  | { type: 'pick'; playerId: string; symbol: number }
+  /**
+   * 点中间公共牌上的一个图案。
+   *
+   * **故意不带 playerId** —— 公共牌是共用的，屏幕根本分不清按下去的是谁的手指。
+   * 由规则按"这一下对上了谁选的那个"来认领：一次成功的确认必然只匹配得上一个人，
+   * 所以认领是确定的，不用猜。这也正是把牌改成"中间一张公共的"之后白赚到的好处。
+   */
+  | { type: 'confirm'; symbol: number }
+  /** 取消选中（限时到了，或者自己改主意） */
+  | { type: 'clear'; playerId: string }
 
 /** 先到几分算赢。太长了孩子会失去耐心，5 分大概两三分钟 */
 export const TARGET_SCORE = 5
@@ -100,26 +144,35 @@ export function sharedSymbol(a: number[], b: number[]): number {
   return -1
 }
 
-/** 当前这一局两张牌共享的图案 */
-export function currentTarget(state: DobbleState): number {
-  const [first, second] = state.players.map((p) => state.cards[p.id] ?? [])
-  return sharedSymbol(first, second)
+/** 这个人这一局要找的那个 = 他的牌和公共牌共享的那个 */
+export function targetFor(state: DobbleState, playerId: string): number {
+  return sharedSymbol(state.cards[playerId] ?? [], state.center)
 }
 
-/** 发两张新牌。牌不够了就重新洗一副 */
+/** 发新的一轮：中间一张 + 每人一张。牌不够了就重新洗一副 */
 function deal(state: DobbleState): DobbleState {
   let { deck, next, rng } = state
-  if (next + state.players.length > deck.length) {
+  const need = state.players.length + 1
+  if (next + need > deck.length) {
     const [shuffled, nextRng] = shuffle(deck, rng)
     deck = shuffled
     rng = nextRng
     next = 0
   }
+  const center = deck[next]
   const cards: Record<string, number[]> = {}
   state.players.forEach((player, i) => {
-    cards[player.id] = deck[next + i]
+    cards[player.id] = deck[next + 1 + i]
   })
-  return { ...state, deck, rng, next: next + state.players.length, cards }
+  return {
+    ...state,
+    deck,
+    rng,
+    next: next + need,
+    center,
+    cards,
+    picks: Object.fromEntries(state.players.map((p) => [p.id, null])),
+  }
 }
 
 export function createInitialState(config: GameConfig): DobbleState {
@@ -131,18 +184,21 @@ export function createInitialState(config: GameConfig): DobbleState {
     order,
     deck,
     next: 0,
+    center: [],
     cards: {},
+    picks: {},
+    pickSeq: 0,
     scores: Object.fromEntries(config.players.map((p) => [p.id, 0])),
     round: 1,
     target: TARGET_SCORE,
     rng,
-    lastTap: null,
+    feedback: null,
     winner: null,
   }
   return deal(base)
 }
 
-/** 抢答游戏没有"轮到谁"，两个人随时都能点 */
+/** 抢答游戏没有"轮到谁"，两个人随时都能动 */
 export function currentPlayer(): string | null {
   return null
 }
@@ -155,36 +211,99 @@ export function getWinner(state: DobbleState): string | null {
   return state.winner
 }
 
-/** 能点的就是自己牌上的每一个图案（包括点错的那些 —— 点错了才有"抢答"可言） */
 export function getLegalActions(state: DobbleState, playerId: string): DobbleAction[] {
   if (isFinished(state)) return []
-  return (state.cards[playerId] ?? []).map((symbol) => ({ type: 'tap', playerId, symbol }))
+  const own = state.cards[playerId] ?? []
+  const picked = state.picks[playerId]
+
+  // 还没选：只能在自己牌上选
+  if (!picked) {
+    return own.map((symbol) => ({ type: 'pick', playerId, symbol }) as DobbleAction)
+  }
+
+  // 选好了：去公共牌上确认，或者改选 / 取消
+  return [
+    ...state.center.map((symbol) => ({ type: 'confirm', symbol }) as DobbleAction),
+    ...own.map((symbol) => ({ type: 'pick', playerId, symbol }) as DobbleAction),
+    { type: 'clear', playerId } as DobbleAction,
+  ]
+}
+
+/**
+ * 这一下点在公共牌上，算谁的？
+ *
+ * 算"选中了同一个图案的那个人"。两个人恰好选了同一个时（他们各自和公共牌
+ * 共享的碰巧是同一个图案），算**先选中的那个** —— 他先找到的。
+ */
+function resolveConfirm(state: DobbleState, symbol: number): string | null {
+  let owner: string | null = null
+  let bestSeq = Infinity
+  for (const [playerId, pick] of Object.entries(state.picks)) {
+    if (pick && pick.symbol === symbol && pick.seq < bestSeq) {
+      owner = playerId
+      bestSeq = pick.seq
+    }
+  }
+  return owner
 }
 
 export function applyAction(state: DobbleState, action: DobbleAction): DobbleState {
   if (isFinished(state)) return state
 
-  const card = state.cards[action.playerId]
-  // 点了自己牌上没有的东西 = 非法，原样返回（不抛异常，孩子会乱点）
-  if (!card || !card.includes(action.symbol)) return state
-
-  const correct = action.symbol === currentTarget(state)
-  const lastTap = { playerId: action.playerId, symbol: action.symbol, correct }
-
   /*
-   * ⚠️ 每一次被接受的点击都要推进随机源，**点错的那次也要**。
-   * 不推进的话，AI 下一次"要不要故意犯错"的掷骰会读到完全一样的值、
-   * 挑中完全一样的那个错图案 —— 它会永远卡在同一个错误答案上，一分也拿不到。
-   * （UNO 踩过一模一样的坑：rng 不动 → AI 整局的"故意失误"都是同一个结果。）
+   * ⚠️ 每一个被接受的动作都要推进随机源，**"没用"的那种也要**。
+   * 不推进的话 AI 下一次掷骰会读到一样的值、做出一样的选择，
+   * 它会永远卡在同一个错误答案上（UNO 和这个游戏都栽过，见 CLAUDE.md）。
    */
   const [, rng] = nextFloat(state.rng)
 
-  // 点错不扣分，只是这一下没用 —— 铁律 4：不做失败叙事
-  if (!correct) return { ...state, rng, lastTap }
+  if (action.type === 'clear') {
+    if (!state.picks[action.playerId]) return state
+    return { ...state, rng, picks: { ...state.picks, [action.playerId]: null }, feedback: null }
+  }
 
-  const scores = { ...state.scores, [action.playerId]: (state.scores[action.playerId] ?? 0) + 1 }
-  const winner = scores[action.playerId] >= state.target ? action.playerId : null
-  const scored: DobbleState = { ...state, rng, scores, lastTap, winner, round: state.round + 1 }
+  if (action.type === 'pick') {
+    const own = state.cards[action.playerId]
+    // 点了自己牌上没有的东西 = 非法，原样返回（不抛异常，孩子会乱点）
+    if (!own?.includes(action.symbol)) return state
+    const seq = state.pickSeq + 1
+    return {
+      ...state,
+      rng,
+      pickSeq: seq,
+      picks: { ...state.picks, [action.playerId]: { symbol: action.symbol, seq } },
+      feedback: { playerId: action.playerId, symbol: action.symbol, kind: 'pick' },
+    }
+  }
+
+  // ── confirm：点在中间的公共牌上 ──
+  if (!state.center.includes(action.symbol)) return state
+
+  // 谁都还没选就来点公共牌 → 提示"先点自己那张"
+  if (!Object.values(state.picks).some(Boolean)) {
+    return { ...state, rng, feedback: { playerId: null, symbol: action.symbol, kind: 'needPick' } }
+  }
+
+  const owner = resolveConfirm(state, action.symbol)
+  /*
+   * 没对上任何人选的那个。不扣分、也不清掉谁的选择（铁律 4：不做失败叙事），
+   * 而且这一下本来就认不出是谁点的 —— 认不出就谁都别罚。
+   * 界面会让公共牌抖一下并短暂不可点，这样乱按也讨不到便宜。
+   */
+  if (!owner) {
+    return { ...state, rng, feedback: { playerId: null, symbol: action.symbol, kind: 'miss' } }
+  }
+
+  const scores = { ...state.scores, [owner]: (state.scores[owner] ?? 0) + 1 }
+  const winner = scores[owner] >= state.target ? owner : null
+  const scored: DobbleState = {
+    ...state,
+    rng,
+    scores,
+    winner,
+    round: state.round + 1,
+    feedback: { playerId: owner, symbol: action.symbol, kind: 'hit' },
+  }
 
   // 赢了就停在这一局的牌面上，让孩子看清是哪个图案
   return winner ? scored : deal(scored)
@@ -193,8 +312,7 @@ export function applyAction(state: DobbleState, action: DobbleAction): DobbleSta
 /**
  * AI 的反应时间（毫秒）。纯函数：同一个局面永远算出同一个值。
  *
- * 这是 AI 在这个游戏里唯一的"难度旋钮" —— 它总能找到正确答案，
- * 只是慢。慢到什么程度由难度定。
+ * 这是 AI 在这个游戏里唯一的"难度旋钮" —— 它总能找到正确答案，只是慢。
  */
 export function aiReactionMs(state: DobbleState, range: [number, number]): number {
   const [ms] = nextInt(state.rng, range[0], range[1])
