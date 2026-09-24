@@ -2,6 +2,7 @@ import { registerGame } from '../core/game-registry'
 import type { GameMeta } from '../core/types'
 import { memoryGame } from './memory'
 import { connect4Game } from './connect4'
+import { dobbleGame } from './dobble'
 import { unoGame } from './uno'
 
 /**
@@ -12,6 +13,7 @@ import { unoGame } from './uno'
 export function registerAllGames(): void {
   registerGame(memoryGame)
   registerGame(connect4Game)
+  registerGame(dobbleGame)
   registerGame(unoGame)
   /*
    * 蛇梯棋暂时下架（2026-09-24）：零选择 = 零参与感，用户实测后决定替换。

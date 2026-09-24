@@ -271,25 +271,6 @@ function goHome() {
   height: 100%;
 }
 
-/* 选项页也要能退出去：不然进错游戏就只能靠系统手势 */
-.corner-back {
-  position: absolute;
-  top: 0;
-  left: 0;
-  display: grid;
-  place-items: center;
-  width: 56px;
-  height: 56px;
-  font-size: 26px;
-  background: var(--bg-card);
-  border-radius: 50%;
-  box-shadow: var(--shadow);
-}
-
-.choices {
-  display: flex;
-  gap: clamp(12px, 3vmin, 28px);
-}
 
 .choice {
   display: grid;
@@ -378,17 +359,6 @@ function goHome() {
   border-radius: 3px;
 }
 
-.go {
-  display: grid;
-  place-items: center;
-  width: clamp(88px, 14vmin, 120px);
-  height: clamp(88px, 14vmin, 120px);
-  font-size: clamp(36px, 6vmin, 52px);
-  color: #fff;
-  background: var(--accent-2);
-  border-radius: 50%;
-  box-shadow: var(--shadow-lg);
-}
 
 .game {
   display: flex;

@@ -18,6 +18,9 @@
     },
     "connect4": {
       "name": "四子棋"
+    },
+    "dobble": {
+      "name": "找相同"
     }
   },
   "common": {
@@ -84,5 +87,8 @@
     "chooseColor": "选一个颜色",
     "teachMe": "跟我学",
     "justPlay": "直接玩"
+  },
+  "dobble": {
+    "symbols": "每张 {n} 个图案"
   }
 }

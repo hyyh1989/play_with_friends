@@ -18,6 +18,9 @@
     },
     "connect4": {
       "name": "Connect Four"
+    },
+    "dobble": {
+      "name": "Spot the Match"
     }
   },
   "common": {
@@ -84,5 +87,8 @@
     "chooseColor": "Pick a color",
     "teachMe": "Teach me",
     "justPlay": "Just play"
+  },
+  "dobble": {
+    "symbols": "{n} pictures per card"
   }
 }

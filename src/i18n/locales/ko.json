@@ -18,6 +18,9 @@
     },
     "connect4": {
       "name": "사목"
+    },
+    "dobble": {
+      "name": "같은 그림 찾기"
     }
   },
   "common": {
@@ -84,5 +87,8 @@
     "chooseColor": "색을 골라요",
     "teachMe": "가르쳐 줘",
     "justPlay": "바로 하기"
+  },
+  "dobble": {
+    "symbols": "카드당 그림 {n}개"
   }
 }

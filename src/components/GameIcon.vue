@@ -92,6 +92,23 @@ const INK = '#3d2c1e'
     </g>
   </svg>
 
+  <!-- 找相同：两张圆牌，各有几个图案，其中一个两边都有（画成高亮的那个） -->
+  <svg v-else-if="id === 'dobble'" class="game-icon" viewBox="0 0 100 100" aria-hidden="true">
+    <!-- 后面那张，稍微露出来一点，说明"要比两张" -->
+    <circle cx="63" cy="37" r="31" fill="#fff" :stroke="INK" stroke-width="3" />
+    <text x="63" y="24" class="pip sm" text-anchor="middle" dominant-baseline="central">🍎</text>
+    <text x="77" y="48" class="pip sm" text-anchor="middle" dominant-baseline="central">⚽</text>
+    <circle cx="49" cy="45" r="11" :fill="GREEN" />
+    <text x="49" y="45" class="pip" text-anchor="middle" dominant-baseline="central">⭐</text>
+
+    <!-- 前面那张 -->
+    <circle cx="37" cy="63" r="31" fill="#fff" :stroke="INK" stroke-width="3" />
+    <text x="24" y="77" class="pip sm" text-anchor="middle" dominant-baseline="central">🐻</text>
+    <text x="48" y="80" class="pip sm" text-anchor="middle" dominant-baseline="central">🚗</text>
+    <circle cx="33" cy="50" r="11" :fill="GREEN" />
+    <text x="33" y="50" class="pip" text-anchor="middle" dominant-baseline="central">⭐</text>
+  </svg>
+
   <span v-else class="game-icon emoji">{{ fallback }}</span>
 </template>
 
@@ -114,5 +131,10 @@ const INK = '#3d2c1e'
 .pip {
   font-size: 25px;
   font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
+}
+
+/* 找相同图标上"陪衬"的那几个图案，比共同图案小一号 */
+.pip.sm {
+  font-size: 16px;
 }
 </style>
