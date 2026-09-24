@@ -123,9 +123,14 @@ export function playSfx(key: SfxKey, rate = 1): void {
   }
 }
 
-/** 播语音。缺文件静默跳过（其他语言的资产还没做）。 */
-export async function speak(key: string): Promise<void> {
-  if (!unlocked) return
+/**
+ * 播语音。缺文件静默跳过（某些语言的资产可能还没做）。
+ * 返回这段语音有多长（秒），教学导览靠它决定什么时候进下一拍；缺文件返回 0。
+ */
+export async function speak(key: string): Promise<number> {
+  if (!unlocked) return 0
   const buffer = await load(`${BASE}audio/voice/${voiceLocale}/${key}.wav`)
-  if (buffer) playBuffer(buffer)
+  if (!buffer) return 0
+  playBuffer(buffer)
+  return buffer.duration
 }

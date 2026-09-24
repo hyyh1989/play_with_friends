@@ -362,9 +362,12 @@ const FACES = [
         @click="playerCount = count"
       >
         <span class="mode-avatars">
-          <span v-for="n in count" :key="n" class="mode-avatar">{{
-            n === 1 ? settings.avatar : AVATARS.filter((a) => a !== settings.avatar)[n - 2]
-          }}</span>
+          <template v-for="n in count" :key="n">
+            <span v-if="n === 2" class="vs">VS</span>
+            <span class="mode-avatar">{{
+              n === 1 ? settings.avatar : AVATARS.filter((a) => a !== settings.avatar)[n - 2]
+            }}</span>
+          </template>
         </span>
       </button>
     </div>
@@ -540,6 +543,20 @@ const FACES = [
 .mode-avatars {
   display: flex;
   gap: 6px;
+  align-items: center;
+}
+
+
+/* 和翻牌配对统一：头像之间加 VS，一眼看出是"你跟它们比" */
+.vs {
+  align-self: center;
+  padding: 3px 9px;
+  font-size: clamp(11px, 1.6vmin, 15px);
+  font-weight: 900;
+  font-style: italic;
+  color: #fff;
+  background: var(--accent-3);
+  border-radius: 999px;
 }
 
 .mode-avatar {

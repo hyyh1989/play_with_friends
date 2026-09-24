@@ -46,6 +46,9 @@ game.snakes|蛇梯棋|Snakes and Ladders|뱀과 사다리
 game.uno|优诺牌|Uno|우노
 uno.ask|要我教你玩吗？|Shall I show you how to play?|내가 방법을 알려 줄까?
 uno.yourTurn|轮到你啦。|It is your turn.|이제 네 차례야.
+uno.intro.goal|我们来比谁先把手里的牌出完。先出完的就赢啦！|Let us see who can play all their cards first. The first one to finish wins!|누가 먼저 카드를 다 내는지 해 보자. 먼저 다 낸 사람이 이겨!
+uno.intro.match|中间这张，是现在的牌。你可以出颜色一样的，也可以出数字一样的。|This card in the middle is the one to match. You can play a card with the same colour, or the same number.|가운데 이 카드에 맞춰서 내는 거야. 같은 색이거나, 같은 숫자면 낼 수 있어.
+uno.intro.draw|要是一张都出不了，就从这里摸一张。|If you cannot play anything, take one card from here.|낼 수 있는 카드가 없으면 여기서 한 장 가져와.
 uno.match.red|这张也是红色的，和中间的一样，点它就可以出。|This one is red too, just like the middle card. Tap it to play it.|이 카드도 빨간색이야. 가운데 카드랑 같아. 눌러서 내 보자.
 uno.match.yellow|这张也是黄色的，和中间的一样，点它就可以出。|This one is yellow too, just like the middle card. Tap it to play it.|이 카드도 노란색이야. 가운데 카드랑 같아. 눌러서 내 보자.
 uno.match.green|这张也是绿色的，和中间的一样，点它就可以出。|This one is green too, just like the middle card. Tap it to play it.|이 카드도 초록색이야. 가운데 카드랑 같아. 눌러서 내 보자.
@@ -61,6 +64,7 @@ uno.wellDone|真棒！|Well done!|잘했어!
 uno.uno|只剩一张啦，优诺！|Only one card left. Uno!|이제 한 장 남았어. 우노!
 uno.win|牌都出完啦，你赢了！|All your cards are gone. You win!|카드를 다 냈어. 네가 이겼어!
 uno.opponentCount|这里能看到，对手还剩几张牌。|Here you can see how many cards your friend has left.|여기서 친구한테 카드가 몇 장 남았는지 볼 수 있어.
+uno.opponentDrew|它也没有能出的牌，也摸了一张。你看，它的牌变多了。|It could not play anything either, so it took a card. Look, it has more cards now.|쟤도 낼 카드가 없어서 한 장 가져갔어. 봐, 카드가 늘었지?
 '
 
 run_locale() {

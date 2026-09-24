@@ -27,6 +27,7 @@ export type HintId =
   | 'mustDraw'
   | 'wildColor'
   | 'opponentCount'
+  | 'opponentDrew'
 
 export interface Hint {
   id: HintId

@@ -23,6 +23,7 @@ import {
   type UnoState,
 } from './rules'
 import { chooseAiAction } from './ai'
+import { createTutorialState } from './tutorial'
 import { allMastered, MASTERY, nextHint, recordSuccess, type Hint } from './coach'
 
 const AI_THINK_MS = 900
@@ -44,6 +45,26 @@ const coachOn = ref(false)
 const hint = shallowRef<Hint | null>(null)
 const handRefs = new Map<string, HTMLElement>()
 const swatchesEl = ref<HTMLElement | null>(null)
+/*
+ * 开场导览：三拍，每拍指着一样东西说一句。
+ * 目标先讲（不然孩子不知道自己在追求什么），规则仍然留到情境里再教一遍 ——
+ * 先告诉她、再让她做，重复是有用的。
+ * null = 导览结束。点屏幕任意处可以跳到下一拍。
+ */
+const INTRO = [
+  { voice: 'uno.intro.goal', target: 'hand' },
+  { voice: 'uno.intro.match', target: 'discard' },
+  { voice: 'uno.intro.draw', target: 'pile' },
+] as const
+const introBeat = ref<number | null>(null)
+
+/** 「直接玩」那张图上摊开的三张牌 */
+const ASK_FAN: Card[] = [
+  { id: 'fan1', kind: 'number', color: 'red', value: 7 },
+  { id: 'fan2', kind: 'number', color: 'green', value: 2 },
+  { id: 'fan3', kind: 'number', color: 'blue', value: 5 },
+]
+
 let turnStartedAt = 0
 let coachTimer: number | undefined
 let lastVoice = ''
@@ -74,6 +95,12 @@ const flying = shallowRef<{ card?: Card; back?: boolean } | null>(null)
 const flyStyle = ref<Record<string, string>>({})
 /** 飞牌用自己的定时器：clearTimers 每次状态变化都会跑，会把它一起清掉 */
 let flyTimer: number | undefined
+/*
+ * 旁白也要用自己的定时器。
+ * clearTimers() 每次状态变化都会跑，公共定时器里的延时播报会被下一步操作清掉 ——
+ * 「对方也摸牌了」那一课就是这么丢的（和飞牌当初同一个坑）。
+ */
+let narrateTimer: number | undefined
 
 function anchorOf(playerId: string): HTMLElement | null {
   return playerId === 'child' ? handEl.value : (seatEls.get(playerId) ?? null)
@@ -113,7 +140,10 @@ function clearTimers() {
   timers = []
 }
 
-onUnmounted(() => clearTimeout(flyTimer))
+onUnmounted(() => {
+  clearTimeout(flyTimer)
+  clearTimeout(narrateTimer)
+})
 onUnmounted(clearTimers)
 onUnmounted(() => clearInterval(coachTimer))
 
@@ -131,7 +161,11 @@ const activePlayer = computed(
   () => state.value?.players.find((p) => p.id === activeId.value) ?? null,
 )
 const myTurn = computed(
-  () => activePlayer.value?.kind === 'human' && !busy.value && !finished.value,
+  () =>
+    activePlayer.value?.kind === 'human' &&
+    !busy.value &&
+    !finished.value &&
+    introBeat.value === null,
 )
 const myHand = computed(() => state.value?.hands.child ?? [])
 const top = computed(() => (state.value ? topCard(state.value) : null))
@@ -162,12 +196,19 @@ function start() {
   busy.value = false
   showResult.value = false
   pendingWildId.value = null
-  state.value = createInitialState({
-    players,
-    difficulty: settings.difficulty,
-    variant: { level: settings.unoLevel },
-    seed: Date.now(),
-  })
+  introBeat.value = null
+  /*
+   * 教学用写死的一局：每一课必然按顺序发生，不靠运气。
+   * 孩子每回合只有唯一解，所以剧本不会被走偏（见 tutorial.ts）。
+   */
+  state.value = coachOn.value
+    ? createTutorialState(players)
+    : createInitialState({
+        players,
+        difficulty: settings.difficulty,
+        variant: { level: settings.unoLevel },
+        seed: Date.now(),
+      })
   phase.value = 'playing'
   turnStartedAt = Date.now()
   clearInterval(coachTimer)
@@ -180,12 +221,39 @@ function startWithCoach() {
   coachOn.value = true
   playerCount.value = 2 // 教学时固定两人，少一个要做的决定
   start()
+  // 牌桌先摆出来，导览才有东西可指
+  void runIntroBeat(0)
 }
 
 function skipCoach() {
   coachOn.value = false
   phase.value = 'setup'
   playSfx('tap')
+}
+
+/** 走到导览的第 n 拍：指着对应元素、念那句话、说完自动进下一拍 */
+async function runIntroBeat(n: number) {
+  if (n >= INTRO.length) {
+    introBeat.value = null
+    turnStartedAt = Date.now()
+    evaluateHint()
+    return
+  }
+  introBeat.value = n
+  const seconds = await speak(INTRO[n].voice)
+  // 缺语音文件时给个固定时长兜底，否则会一闪而过
+  const wait = (seconds > 0 ? seconds * 1000 : 2600) + 500
+  later(() => {
+    if (introBeat.value === n) void runIntroBeat(n + 1)
+  }, wait)
+}
+
+/** 点屏幕任意处：跳到下一拍，不耐烦的孩子不会被困住 */
+function skipIntroBeat() {
+  const n = introBeat.value
+  if (n === null) return
+  clearTimers()
+  void runIntroBeat(n + 1)
 }
 
 /** 记下每张手牌对应的 DOM 元素，手指要靠它定位 */
@@ -196,6 +264,7 @@ function setHandRef(cardId: string, el: unknown) {
 
 /** 现在该不该指、指哪里。每 500ms 跑一次，也在每次状态变化后跑 */
 function evaluateHint() {
+  if (introBeat.value !== null) return
   if (!coachOn.value || !state.value || finished.value || !myTurn.value) {
     setHint(null)
     return
@@ -232,6 +301,13 @@ function setHint(next: Hint | null) {
 
 /** 提示指向的那个 DOM 元素 */
 const hintTarget = computed<HTMLElement | null>(() => {
+  const beat = introBeat.value
+  if (beat !== null) {
+    const which = INTRO[beat].target
+    if (which === 'hand') return handEl.value
+    if (which === 'discard') return discardEl.value
+    return pileEl.value
+  }
   const h = hint.value
   if (!h) return null
   if (h.target.kind === 'pile') return pileEl.value
@@ -307,6 +383,20 @@ watch(
     }
 
     const event = current.lastEvent
+    // 对手也摸牌了 —— 这一幕孩子看得见结果（它的牌变多了），值得点一句
+    if (
+      coachOn.value &&
+      event?.type === 'draw' &&
+      event.playerId !== 'child' &&
+      (settings.coachProgress.opponentDrew ?? 0) === 0
+    ) {
+      settings.coachProgress = {
+        ...settings.coachProgress,
+        opponentDrew: (settings.coachProgress.opponentDrew ?? 0) + MASTERY,
+      }
+      clearTimeout(narrateTimer)
+      narrateTimer = window.setTimeout(() => void speak('uno.opponentDrew'), 600)
+    }
     if (event?.type === 'play') {
       playSfx('flip')
       flyCard(anchorOf(event.playerId), discardEl.value, { card: event.card })
@@ -357,17 +447,30 @@ function goHome() {
   <div v-if="phase === 'ask'" class="setup safe-area">
     <button class="corner-back pressable" :aria-label="$t('common.back')" @click="goHome">←</button>
     <div class="choices">
-      <button class="choice ask-choice pressable" :aria-label="$t('uno.teachMe')" @click="startWithCoach">
+      <!--
+        两个选项必须一眼分得出，所以形状、颜色、图标三样都不同：
+        左边是一张画着大问号的牌（我不会，教我）；右边是摊开的一手牌（直接开打）。
+        文字是给大人看的，孩子靠图和语音。
+      -->
+      <button class="choice ask-choice teach pressable" @click="startWithCoach">
         <span class="ask-art">
-          <span class="ask-card"><UnoCard :card="{ id: 'demo', kind: 'number', color: 'red', value: 5 }" /></span>
+          <span class="ask-single">
+            <span class="ask-mark">？</span>
+          </span>
           <span class="ask-hand">👆</span>
         </span>
+        <span class="ask-label">{{ $t('uno.teachMe') }}</span>
       </button>
-      <button class="choice ask-choice pressable" :aria-label="$t('uno.justPlay')" @click="skipCoach">
+
+      <button class="choice ask-choice play pressable" @click="skipCoach">
         <span class="ask-art">
-          <span class="ask-card dim"><UnoCard back /></span>
-          <span class="ask-play">▶</span>
+          <span class="ask-fan">
+            <span v-for="(c, i) in ASK_FAN" :key="i" class="ask-fan-card" :style="{ '--i': i }">
+              <UnoCard :card="c" />
+            </span>
+          </span>
         </span>
+        <span class="ask-label">{{ $t('uno.justPlay') }}</span>
       </button>
     </div>
   </div>
@@ -384,9 +487,12 @@ function goHome() {
         @click="playerCount = count"
       >
         <span class="mode-avatars">
-          <span v-for="n in count" :key="n" class="mode-avatar">{{
-            n === 1 ? settings.avatar : AVATARS.filter((a) => a !== settings.avatar)[n - 2]
-          }}</span>
+          <template v-for="n in count" :key="n">
+            <span v-if="n === 2" class="vs">VS</span>
+            <span class="mode-avatar">{{
+              n === 1 ? settings.avatar : AVATARS.filter((a) => a !== settings.avatar)[n - 2]
+            }}</span>
+          </template>
         </span>
       </button>
     </div>
@@ -478,7 +584,10 @@ function goHome() {
     </div>
 
     <!-- 教学的手指：指着该点的东西，第一次教某条规则时把周围压暗 -->
-    <PointingHand :target="hintTarget" :spotlight="hint?.first" />
+    <PointingHand :target="hintTarget" :spotlight="introBeat !== null || hint?.first" />
+
+    <!-- 导览期间盖一层，点哪里都是"下一拍" -->
+    <div v-if="introBeat !== null" class="intro-catcher" @click="skipIntroBeat" />
 
     <GameResult
       v-if="showResult && state"
@@ -540,54 +649,84 @@ function goHome() {
 .mode-avatars {
   display: flex;
   gap: 6px;
+  align-items: center;
 }
 
 /* 开场那两张"跟我学 / 直接玩"的图 */
 .ask-choice {
-  padding: clamp(16px, 3vmin, 30px);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: clamp(16px, 3vmin, 28px);
+}
+
+.ask-choice.teach {
+  background: #eafaf4;
+}
+
+.ask-choice.play {
+  background: #fff6de;
 }
 
 .ask-art {
   position: relative;
-  display: block;
-  width: clamp(80px, 15vmin, 140px);
+  display: grid;
+  place-items: center;
+  width: clamp(110px, 20vmin, 180px);
+  height: clamp(100px, 18vmin, 160px);
 }
 
-.ask-card {
-  display: block;
-  width: 100%;
+.ask-label {
+  font-size: clamp(14px, 2vmin, 19px);
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+
+/* 教我：一张画着大问号的牌 */
+.ask-single {
+  display: grid;
+  place-items: center;
+  width: clamp(62px, 11vmin, 96px);
   aspect-ratio: 2 / 3;
-  container-type: inline-size;
+  background: #2a9df4;
+  border-radius: 12%;
+  box-shadow: inset 0 0 0 5% #fffdf7, 0 3px 6px rgba(61, 44, 30, 0.3);
 }
 
-.ask-card.dim {
-  opacity: 0.75;
+.ask-mark {
+  font-size: clamp(34px, 6vmin, 54px);
+  font-weight: 900;
+  color: #fffdf7;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
 .ask-hand {
   position: absolute;
-  right: -14%;
-  bottom: -10%;
-  font-size: clamp(34px, 6vmin, 56px);
+  right: 14%;
+  bottom: 4%;
+  font-size: clamp(30px, 5vmin, 48px);
   line-height: 1;
   font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
   animation: poke-demo 1.2s ease-in-out infinite;
 }
 
-.ask-play {
+/* 直接玩：摊开的一手牌，形状和左边完全不同 */
+.ask-fan {
+  position: relative;
+  width: clamp(100px, 18vmin, 160px);
+  height: 100%;
+}
+
+.ask-fan-card {
   position: absolute;
   top: 50%;
   left: 50%;
-  display: grid;
-  place-items: center;
-  width: 58%;
-  aspect-ratio: 1;
-  font-size: clamp(22px, 4vmin, 38px);
-  color: #fff;
-  background: var(--accent-2);
-  border-radius: 50%;
-  box-shadow: var(--shadow);
-  transform: translate(-50%, -50%);
+  width: clamp(50px, 9vmin, 78px);
+  aspect-ratio: 2 / 3;
+  container-type: inline-size;
+  transform: translate(-50%, -50%) rotate(calc((var(--i) - 1) * 16deg))
+    translateY(calc(var(--i) * 0px - 4px));
+  transform-origin: 50% 90%;
 }
 
 @keyframes poke-demo {
@@ -598,6 +737,19 @@ function goHome() {
   50% {
     transform: translate(-5px, -12px);
   }
+}
+
+
+/* 和翻牌配对统一：头像之间加 VS，一眼看出是"你跟它们比" */
+.vs {
+  align-self: center;
+  padding: 3px 9px;
+  font-size: clamp(11px, 1.6vmin, 15px);
+  font-weight: 900;
+  font-style: italic;
+  color: #fff;
+  background: var(--accent-3);
+  border-radius: 999px;
 }
 
 .mode-avatar {
@@ -829,6 +981,13 @@ function goHome() {
   0%, 100% { transform: translateX(0); }
   25% { transform: translateX(-7px) rotate(-3deg); }
   75% { transform: translateX(7px) rotate(3deg); }
+}
+
+/* 导览期间的透明遮罩：只负责接住点击，不挡视线 */
+.intro-catcher {
+  position: fixed;
+  inset: 0;
+  z-index: 42;
 }
 
 .color-picker {
