@@ -67,7 +67,8 @@
     "modeAi": "친구와 하기",
     "size4": "4쌍",
     "size6": "6쌍",
-    "size8": "8쌍"
+    "size8": "8쌍",
+    "modeDuo": "둘이서 번갈아 하기"
   },
   "snakes": {
     "players2": "두 명",

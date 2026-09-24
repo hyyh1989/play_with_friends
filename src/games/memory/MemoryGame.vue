@@ -28,18 +28,30 @@ const router = useRouter()
 const settings = useSettingsStore()
 
 const phase = ref<'setup' | 'playing'>('setup')
-const mode = ref<'solo' | 'ai'>('solo')
+/*
+ * solo = 自己玩；ai = 和电脑轮流；duo = 两个人轮流用同一台 iPad。
+ *
+ * duo 是"面对面一起玩"的最轻形态：不需要联网、房间号、账号，把 iPad 推来推去
+ * 就行，和真的桌游一样。翻牌配对不用藏手牌，所以零额外设计。
+ */
+const mode = ref<'solo' | 'ai' | 'duo'>('solo')
+/** 刚换人时把新玩家的头像放大亮一下 —— 两个人轮流时没有 AI 的停顿当信号 */
+const handoffTo = ref<string | null>(null)
 const pairs = ref<PairCount>(4)
 const state = shallowRef<MemoryState | null>(null)
 
 let mismatchTimer: number | undefined
 let aiTimer: number | undefined
+let handoffTimer: number | undefined
 
 function clearTimers() {
   clearTimeout(mismatchTimer)
   clearTimeout(aiTimer)
 }
-onUnmounted(clearTimers)
+onUnmounted(() => {
+  clearTimers()
+  clearTimeout(handoffTimer)
+})
 
 const aiAvatar = computed(() => (settings.avatar === '🐰' ? '🐻' : '🐰'))
 const rows = computed(() => (state.value ? state.value.cards.length / 4 : 2))
@@ -50,6 +62,8 @@ function start() {
   const players: PlayerRef[] = [{ id: 'child', kind: 'human', avatar: settings.avatar }]
   if (mode.value === 'ai') {
     players.push({ id: 'bear', kind: 'ai', avatar: aiAvatar.value, nameKey: 'ai.player1' })
+  } else if (mode.value === 'duo') {
+    players.push({ id: 'friend', kind: 'human', avatar: aiAvatar.value })
   }
   state.value = createInitialState({
     players,
@@ -86,9 +100,18 @@ function tapCard(cardId: number) {
 
 watch(
   state,
-  (current) => {
+  (current, previous) => {
     clearTimers()
     if (!current || isFinished(current)) return
+
+    // 换人了就把新玩家亮一下。两个人轮流时这是唯一的交接信号
+    const now = currentPlayer(current)
+    if (previous && now && now !== currentPlayer(previous) && current.players.length > 1) {
+      handoffTo.value = now
+      playSfx('tap')
+      clearTimeout(handoffTimer)
+      handoffTimer = window.setTimeout(() => (handoffTo.value = null), 1100)
+    }
 
     if (current.faceUp.length === 2) {
       mismatchTimer = window.setTimeout(() => dispatch({ type: 'resolve' }), MISMATCH_MS)
@@ -134,6 +157,20 @@ function goHome() {
         :class="{ active: mode === 'ai' }"
         :aria-label="$t('memory.modeAi')"
         @click="mode = 'ai'"
+      >
+        <span class="mode-avatars">
+          <span class="mode-avatar">{{ settings.avatar }}</span>
+          <span class="vs">VS</span>
+          <span class="mode-avatar robot">{{ aiAvatar }}</span>
+          <span class="robot-badge">🤖</span>
+        </span>
+      </button>
+      <!-- 两个人用同一台 iPad 轮流：和上面那个的区别是对面不是机器人 -->
+      <button
+        class="choice pressable"
+        :class="{ active: mode === 'duo' }"
+        :aria-label="$t('memory.modeDuo')"
+        @click="mode = 'duo'"
       >
         <span class="mode-avatars">
           <span class="mode-avatar">{{ settings.avatar }}</span>
@@ -203,6 +240,13 @@ function goHome() {
       </div>
     </div>
 
+    <!-- 换人：把新玩家的头像放大亮一下，不挡操作 -->
+    <div v-if="handoffTo" class="handoff">
+      <span class="handoff-avatar">{{
+        state?.players.find((p) => p.id === handoffTo)?.avatar
+      }}</span>
+    </div>
+
     <GameResult
       v-if="finished && state"
       :players="state.players"
@@ -260,6 +304,48 @@ function goHome() {
 
 .choice.active {
   border-color: var(--accent-2);
+}
+
+/* 和电脑玩那一项，给对手头像加个机器人角标，和"两个人玩"区分开 */
+.mode-avatars {
+  position: relative;
+}
+
+.robot-badge {
+  position: absolute;
+  right: -6px;
+  bottom: -8px;
+  font-size: clamp(14px, 2.2vmin, 20px);
+  line-height: 1;
+  font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
+}
+
+.handoff {
+  position: fixed;
+  inset: 0;
+  z-index: 15;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+.handoff-avatar {
+  font-size: clamp(80px, 18vmin, 170px);
+  line-height: 1;
+  font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
+  filter: drop-shadow(0 6px 12px rgba(61, 44, 30, 0.4));
+  animation: handoff-pop 1.1s ease-out;
+}
+
+@keyframes handoff-pop {
+  0% { transform: scale(0.4); opacity: 0; }
+  25% { transform: scale(1.1); opacity: 1; }
+  70% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(1); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .handoff-avatar { animation: none; }
 }
 
 .mode-avatars {

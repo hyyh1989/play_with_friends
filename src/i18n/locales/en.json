@@ -67,7 +67,8 @@
     "modeAi": "Play with a friend",
     "size4": "4 pairs",
     "size6": "6 pairs",
-    "size8": "8 pairs"
+    "size8": "8 pairs",
+    "modeDuo": "Two players, taking turns"
   },
   "snakes": {
     "players2": "2 players",
