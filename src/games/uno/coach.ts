@@ -28,6 +28,12 @@ export type HintId =
   | 'wildColor'
   | 'opponentCount'
   | 'opponentDrew'
+  // 出牌之后的旁白（不是"该点哪里"，是"刚才发生了什么"）
+  | 'placed'
+  | 'colorChanged'
+  | 'skip'
+  | 'reverse'
+  | 'draw2'
 
 export interface Hint {
   id: HintId

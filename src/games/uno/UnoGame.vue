@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import GameResult from '../../components/GameResult.vue'
 import UnoCard from './UnoCard.vue'
 import PointingHand from '../../components/PointingHand.vue'
-import { playSfx, speak } from '../../core/audio'
+import { playSfx, speak, whenVoiceIdle } from '../../core/audio'
 import { useSettingsStore, AVATARS } from '../../stores/settings'
 import type { PlayerRef } from '../../core/types'
 import {
@@ -15,7 +15,6 @@ import {
   currentPlayer,
   getWinner,
   isFinished,
-  playersAtUno,
   topCard,
   type Card,
   type CardColor,
@@ -51,11 +50,14 @@ const swatchesEl = ref<HTMLElement | null>(null)
  * 先告诉她、再让她做，重复是有用的。
  * null = 导览结束。点屏幕任意处可以跳到下一拍。
  */
-const INTRO = [
-  { voice: 'uno.intro.goal', target: 'hand' },
-  { voice: 'uno.intro.match', target: 'discard' },
-  { voice: 'uno.intro.draw', target: 'pile' },
-] as const
+/*
+ * 开场只讲【目标】和【牌放哪儿】，一句话。
+ *
+ * 第一版把三条规则一次讲完（约 15 秒），之后全程沉默、只有卡住才提示 ——
+ * 用户实测后指出该反过来：开场极短，规则留到每一回合当场讲。
+ * 孩子听讲撑不住十几秒，但"这一步为什么能这么出"在当下讲，她听得进去。
+ */
+const INTRO = [{ voice: 'uno.intro.goal', target: 'discard' }] as const
 const introBeat = ref<number | null>(null)
 
 /** 「直接玩」那张图上摊开的三张牌 */
@@ -73,7 +75,6 @@ const state = shallowRef<UnoState | null>(null)
 const showResult = ref(false)
 const busy = ref(false)
 const pendingWildId = ref<string | null>(null)
-const unoFlash = ref<string | null>(null)
 /** 点了出不了的牌，抖一下给反馈 */
 const shakingId = ref<string | null>(null)
 
@@ -151,7 +152,8 @@ onMounted(() => {
   const needsTeaching = settings.tutorialEnabled && !allMastered(settings.coachProgress)
   if (needsTeaching) {
     phase.value = 'ask'
-    void speak('uno.ask')
+    // 首页点卡片时念了游戏名，等它彻底说完再问，否则两句叠在一起
+    void whenVoiceIdle().then(() => speak('uno.ask'))
   }
 })
 
@@ -256,6 +258,42 @@ function skipIntroBeat() {
   void runIntroBeat(n + 1)
 }
 
+/**
+ * 出完牌之后的旁白：说"刚才发生了什么"，不是"该点哪里"。
+ * 每句只说一次，说完就记下。用独立定时器，别被 clearTimers 清掉。
+ */
+function narrateAfterPlay(before: UnoState, card: Card) {
+  if (!settings.tutorialEnabled) return
+  const seen = (id: string) => (settings.coachProgress[id as never] ?? 0) > 0
+  const mark = (id: string) => {
+    settings.coachProgress = { ...settings.coachProgress, [id]: MASTERY }
+  }
+
+  let line: string | null = null
+  if (card.kind === 'skip' && !seen('skip')) {
+    line = 'uno.skip'
+    mark('skip')
+  } else if (card.kind === 'reverse' && !seen('reverse')) {
+    line = 'uno.reverse'
+    mark('reverse')
+  } else if (card.kind === 'draw2' && !seen('draw2')) {
+    line = 'uno.draw2'
+    mark('draw2')
+  } else if (card.color && card.color !== before.activeColor && !seen('colorChanged')) {
+    // 出了同数字不同色的牌 —— 颜色跟着变了，这一点孩子看不出来
+    line = 'uno.colorChanged'
+    mark('colorChanged')
+  } else if (!seen('placed')) {
+    line = 'uno.placed'
+    mark('placed')
+  }
+  if (!line) return
+
+  clearTimeout(narrateTimer)
+  // 等牌飞到弃牌堆落定再说，否则话说完牌还没到
+  narrateTimer = window.setTimeout(() => void speak(line!), FLY_MS + 250)
+}
+
 /** 记下每张手牌对应的 DOM 元素，手指要靠它定位 */
 function setHandRef(cardId: string, el: unknown) {
   if (el instanceof HTMLElement) handRefs.set(cardId, el)
@@ -303,10 +341,8 @@ function setHint(next: Hint | null) {
 const hintTarget = computed<HTMLElement | null>(() => {
   const beat = introBeat.value
   if (beat !== null) {
-    const which = INTRO[beat].target
-    if (which === 'hand') return handEl.value
-    if (which === 'discard') return discardEl.value
-    return pileEl.value
+    // 开场只有一拍，指着中间的弃牌堆（"出掉的牌就放这里"）
+    return discardEl.value
   }
   const h = hint.value
   if (!h) return null
@@ -368,19 +404,12 @@ function drawCard() {
 
 watch(
   state,
-  (current) => {
+  (current, previousState) => {
     if (!current) return
     clearTimers()
 
-    const atUno = playersAtUno(current)
-    if (atUno.length > 0 && unoFlash.value !== atUno[0]) {
-      unoFlash.value = atUno[0]
-      playSfx('success')
-      if (atUno[0] === 'child') void speak('uno.uno')
-      later(() => (unoFlash.value = null), 1400)
-    } else if (atUno.length === 0) {
-      unoFlash.value = null
-    }
+    // 「喊 UNO」整套去掉了：官方规则里它是个带罚牌的义务，对 5 岁孩子只是
+    // 多一件会做错的事。剩一张的高亮也一并撤掉，避免暗示"这里该做点什么"。
 
     const event = current.lastEvent
     // 对手也摸牌了 —— 这一幕孩子看得见结果（它的牌变多了），值得点一句
@@ -400,6 +429,9 @@ watch(
     if (event?.type === 'play') {
       playSfx('flip')
       flyCard(anchorOf(event.playerId), discardEl.value, { card: event.card })
+      if (event.playerId === 'child' && previousState) {
+        narrateAfterPlay(previousState, event.card)
+      }
     }
     if (event?.type === 'draw') {
       playSfx('tap')
@@ -508,7 +540,7 @@ function goHome() {
           v-for="player in others"
           :key="player.id"
           class="seat"
-          :class="{ active: player.id === activeId, uno: unoFlash === player.id }"
+          :class="{ active: player.id === activeId }"
         >
           <span class="seat-avatar">{{ player.avatar }}</span>
           <!-- 对手手牌：一个牌堆加一个数字就够了，铺开一排牌多了会很乱 -->
@@ -547,7 +579,7 @@ function goHome() {
       </div>
     </div>
 
-    <footer ref="handEl" class="hand-bar" :class="{ mine: myTurn, uno: unoFlash === 'child' }">
+    <footer ref="handEl" class="hand-bar" :class="{ mine: myTurn }">
       <div class="hand">
         <button
           v-for="card in myHand"

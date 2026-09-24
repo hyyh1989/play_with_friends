@@ -29,6 +29,17 @@ const SFX_FILES: Record<SfxKey, string> = {
   nope: `${BASE}audio/sfx/nope.wav`,
 }
 
+/*
+ * 同一时刻只允许一句语音。
+ * 首页点游戏卡片会念游戏名，进游戏又会念"要我教你玩吗" —— 两句会叠在一起
+ * （用户实测反馈）。现在新的一句会掐掉旧的，voiceRemaining() 则让调用方
+ * 可以选择"等上一句说完再说"。
+ */
+let currentVoice: AudioBufferSourceNode | null = null
+let voiceEndsAt = 0
+/** 正在加载中的语音数。只看"还要播多久"是不够的 —— 上一句可能还没加载完就被问了 */
+let voiceLoading = 0
+
 let ctx: AudioContext | null = null
 let masterGain: GainNode | null = null
 let unlocked = false
@@ -99,13 +110,14 @@ async function preloadSfx(): Promise<void> {
   await Promise.all(Object.values(SFX_FILES).map(load))
 }
 
-function playBuffer(buffer: AudioBuffer, rate = 1): void {
-  if (!ctx || !masterGain) return
+function playBuffer(buffer: AudioBuffer, rate = 1): AudioBufferSourceNode | null {
+  if (!ctx || !masterGain) return null
   const source = ctx.createBufferSource()
   source.buffer = buffer
   source.playbackRate.value = rate
   source.connect(masterGain)
   source.start(0)
+  return source
 }
 
 /**
@@ -124,13 +136,57 @@ export function playSfx(key: SfxKey, rate = 1): void {
 }
 
 /**
- * 播语音。缺文件静默跳过（某些语言的资产可能还没做）。
+ * 播语音。**会掐掉正在播的上一句**，保证任何时候只有一个人在说话。
+ * 缺文件静默跳过（某些语言的资产可能还没做）。
  * 返回这段语音有多长（秒），教学导览靠它决定什么时候进下一拍；缺文件返回 0。
  */
 export async function speak(key: string): Promise<number> {
   if (!unlocked) return 0
-  const buffer = await load(`${BASE}audio/voice/${voiceLocale}/${key}.wav`)
+  voiceLoading++
+  let buffer: AudioBuffer | null
+  try {
+    buffer = await load(`${BASE}audio/voice/${voiceLocale}/${key}.wav`)
+  } finally {
+    voiceLoading--
+  }
   if (!buffer) return 0
-  playBuffer(buffer)
+  stopVoice()
+  currentVoice = playBuffer(buffer)
+  voiceEndsAt = performance.now() + buffer.duration * 1000
+  if (currentVoice) currentVoice.onended = () => (currentVoice = null)
   return buffer.duration
+}
+
+/** 掐掉正在播的语音 */
+export function stopVoice(): void {
+  try {
+    currentVoice?.stop()
+  } catch {
+    /* 已经播完了 */
+  }
+  currentVoice = null
+  voiceEndsAt = 0
+}
+
+/** 当前这句还要说多久（秒）。 */
+export function voiceRemaining(): number {
+  return Math.max(0, (voiceEndsAt - performance.now()) / 1000)
+}
+
+/**
+ * 等到"没有语音在播、也没有语音在加载"。
+ *
+ * 只看 voiceRemaining 不够：首页刚念完游戏名就跳进游戏，那句可能还在加载，
+ * 这时问"还要播多久"会得到 0，结果两句叠在一起（用户实测到的）。
+ */
+export function whenVoiceIdle(timeoutMs = 6000): Promise<void> {
+  const deadline = performance.now() + timeoutMs
+  return new Promise((resolve) => {
+    const check = () => {
+      const idle = voiceLoading === 0 && voiceRemaining() === 0
+      if (idle || performance.now() > deadline) resolve()
+      else setTimeout(check, 100)
+    }
+    check()
+  })
 }
