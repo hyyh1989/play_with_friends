@@ -421,10 +421,10 @@ function dropStyle(col: number) {
 .chip {
   display: grid;
   place-items: center;
-  width: 100%;
-  height: 100%;
   border-radius: 50%;
   box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.18);
+  /* 自己当容器，头像按棋子大小缩放（不管棋子是在棋盘里还是在 HUD 里） */
+  container-type: inline-size;
 }
 
 .player .chip {
@@ -433,13 +433,9 @@ function dropStyle(col: number) {
 }
 
 .chip-face {
-  font-size: 58cqmin;
+  font-size: 58cqw;
   line-height: 1;
   font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
-}
-
-.player .chip-face {
-  font-size: clamp(20px, 3.2vmin, 30px);
 }
 
 .board-wrap {
@@ -483,25 +479,31 @@ function dropStyle(col: number) {
   cursor: default;
 }
 
+/*
+ * ⚠️ 这里不能用 padding 百分比留空隙。
+ *
+ * 绝对定位元素的百分比内边距是按【包含块】算的，不是按自己 —— 原来写 padding:7%，
+ * 在 685px 宽的棋盘里算出 48px，把 98px 的格子吃得只剩 2px，棋子小成一个点
+ * （用户反馈"落子后棋子完全看不见"）。
+ * 改成给棋子本身 inset：inset 的百分比才是按这个格子算的。
+ */
 .hole {
   position: absolute;
-  display: grid;
-  place-items: center;
-  padding: 7%;
   container-type: inline-size;
 }
 
 .hole::before {
   content: '';
   position: absolute;
-  inset: 7%;
+  inset: 8%;
   background: var(--bg);
   border-radius: 50%;
   box-shadow: inset 0 3px 5px rgba(0, 0, 0, 0.2);
 }
 
 .hole .chip {
-  position: relative;
+  position: absolute;
+  inset: 8%;
 }
 
 /* 连成的那四个：亮起来并跳动 */
@@ -513,26 +515,24 @@ function dropStyle(col: number) {
 .falling {
   position: absolute;
   z-index: 2;
-  padding: 7%;
-  container-type: inline-size;
   animation: fall 380ms cubic-bezier(0.45, 0.05, 0.55, 1) forwards;
+}
+
+.falling .chip {
+  position: absolute;
+  inset: 8%;
 }
 
 .ready-bar {
   display: grid;
   place-items: center;
   height: clamp(54px, 9vmin, 84px);
-  container-type: inline-size;
 }
 
 .floating {
   width: clamp(44px, 7vmin, 66px);
   height: clamp(44px, 7vmin, 66px);
   animation: bob 1.5s ease-in-out infinite;
-}
-
-.floating .chip-face {
-  font-size: clamp(22px, 3.6vmin, 34px);
 }
 
 .handoff {

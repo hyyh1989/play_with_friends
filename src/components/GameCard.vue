@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import type { GameMeta } from '../core/types'
+import GameIcon from './GameIcon.vue'
 
 const props = defineProps<{
   meta: GameMeta
@@ -23,7 +24,7 @@ function handleTap() {
 
 <template>
   <button class="card pressable" :class="{ upcoming, shaking }" @click="handleTap">
-    <span class="icon">{{ meta.icon }}</span>
+    <GameIcon class="icon" :id="meta.id" :fallback="meta.icon" />
     <span class="name">{{ $t(meta.nameKey) }}</span>
     <!-- 待上线用沙漏图标表达，不用文字（零阅读依赖） -->
     <span v-if="upcoming" class="badge">⏳</span>
@@ -47,15 +48,9 @@ function handleTap() {
   box-shadow: var(--shadow-lg);
 }
 
-/*
- * emoji 用专门的字体栈 + line-height:1。
- * Safari 下 emoji 走的是 Apple Color Emoji，它和正文字体的基线/行高不一致，
- * 混排时会让字形在容器里偏移 —— 明确指定字体并压掉行高能避免这个问题。
- */
+/* 图标本身（含 emoji 兜底的字体栈）都在 GameIcon.vue 里 */
 .icon {
-  font-size: clamp(48px, 11vmin, 110px);
-  font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
-  line-height: 1;
+  flex: 0 0 auto;
 }
 
 .name {
