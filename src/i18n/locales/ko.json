@@ -15,6 +15,9 @@
     },
     "uno": {
       "name": "우노"
+    },
+    "connect4": {
+      "name": "사목"
     }
   },
   "common": {

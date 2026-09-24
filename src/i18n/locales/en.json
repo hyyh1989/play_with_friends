@@ -15,6 +15,9 @@
     },
     "uno": {
       "name": "UNO"
+    },
+    "connect4": {
+      "name": "Connect Four"
     }
   },
   "common": {
