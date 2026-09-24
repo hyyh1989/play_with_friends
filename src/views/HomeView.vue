@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import GameCard from '../components/GameCard.vue'
 import SettingsButton from '../components/SettingsButton.vue'
@@ -14,6 +14,17 @@ const settings = useSettingsStore()
 const showAvatarPicker = ref(false)
 
 const games = listGames()
+
+/**
+ * 首页排几列。
+ *
+ * 4 个游戏时必须是 2×2 —— 排成 3 + 1 的话最后一个孤零零掉在左下角，
+ * 看着像"没做完"。其余情况 3 列。窄屏由 CSS 自己折行。
+ */
+const columns = computed(() => {
+  const total = games.length + UPCOMING.length
+  return total === 4 ? 2 : 3
+})
 
 function openGame(id: string) {
   playSfx('tap')
@@ -37,7 +48,7 @@ function tapUpcoming(id: string) {
       <SettingsButton @click="router.push({ name: 'parent' })" />
     </header>
 
-    <main class="grid">
+    <main class="grid" :style="{ '--cols': columns }">
       <GameCard
         v-for="game in games"
         :key="game.meta.id"
@@ -95,8 +106,12 @@ function tapUpcoming(id: string) {
   flex: 1;
   align-content: center;
   justify-content: center;
-  /* iPad 横屏一行放得下 3-4 个；竖屏自动折成两行 */
-  grid-template-columns: repeat(auto-fit, minmax(180px, 240px));
+  /*
+   * 列数按游戏总数算（见 columns），不用 auto-fit ——
+   * auto-fit 在 4 个游戏时会排成 3 + 1，最后一个孤零零掉在左下角。
+   * 窄屏时仍然让它自己折行：min() 保证列数不会超过放得下的数量。
+   */
+  grid-template-columns: repeat(var(--cols, 3), minmax(140px, 240px));
   gap: clamp(16px, 3vmin, 36px);
   padding: 16px 0 24px;
 }
