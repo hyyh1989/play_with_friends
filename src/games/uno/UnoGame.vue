@@ -24,6 +24,7 @@ import {
   type UnoState,
 } from './rules'
 import { chooseAiAction } from './ai'
+import { useGameNet } from '../../net/game-net'
 import { createTutorialState } from './tutorial'
 import { allMastered, MASTERY, nextHint, recordSuccess, type Hint } from './coach'
 
@@ -83,7 +84,25 @@ let turnStartedAt = 0
 let coachTimer: number | undefined
 let lastVoice = ''
 const playerCount = ref(2)
-const state = shallowRef<UnoState | null>(null)
+/*
+ * ── 联机 ──
+ * 注得到 net = 正在和别人联机：**状态由服务端说了算**，这里只显示；
+ * 注不到 = 一个人玩，还是原来那套。
+ * 下面所有原来写死 'child' 的地方都换成了 meId —— 那个写死值正是
+ * 「只能本机玩」的假设本身。
+ */
+const net = useGameNet()
+const meId = computed(() => net?.meId ?? 'child')
+
+/** 本机玩时的状态。联机时不用它，服务端那份才算数 */
+const localState = shallowRef<UnoState | null>(null)
+const state = computed<UnoState | null>(() =>
+  net ? ((net.state.value as UnoState | null) ?? null) : localState.value,
+)
+/** 只有本机模式才写得动状态；联机时状态只能由服务端推进 */
+function setState(next: UnoState | null) {
+  if (!net) localState.value = next
+}
 const showResult = ref(false)
 const busy = ref(false)
 const pendingWildId = ref<string | null>(null)
@@ -116,7 +135,7 @@ let flyTimer: number | undefined
 let narrateTimer: number | undefined
 
 function anchorOf(playerId: string): HTMLElement | null {
-  return playerId === 'child' ? handEl.value : (seatEls.get(playerId) ?? null)
+  return playerId === meId.value ? handEl.value : (seatEls.get(playerId) ?? null)
 }
 
 function flyCard(from: HTMLElement | null, to: HTMLElement | null, payload: { card?: Card; back?: boolean }) {
@@ -181,9 +200,9 @@ const myTurn = computed(
     !finished.value &&
     introBeat.value === null,
 )
-const myHand = computed(() => state.value?.hands.child ?? [])
+const myHand = computed(() => state.value?.hands[meId.value] ?? [])
 const top = computed(() => (state.value ? topCard(state.value) : null))
-const others = computed(() => state.value?.players.filter((p) => p.id !== 'child') ?? [])
+const others = computed(() => state.value?.players.filter((p) => p.id !== meId.value) ?? [])
 
 const COLOR_HEX: Record<CardColor, string> = {
   red: '#e63462',
@@ -230,14 +249,16 @@ function start() {
    * 教学用写死的一局：每一课必然按顺序发生，不靠运气。
    * 孩子每回合只有唯一解，所以剧本不会被走偏（见 tutorial.ts）。
    */
-  state.value = coachOn.value
-    ? createTutorialState(players)
-    : createInitialState({
+  setState(
+    coachOn.value
+      ? createTutorialState(players)
+      : createInitialState({
         players,
         difficulty: settings.difficulty,
-        variant: { level: settings.unoLevel },
-        seed: Date.now(),
-      })
+          variant: { level: settings.unoLevel },
+          seed: Date.now(),
+        }),
+  )
   phase.value = 'playing'
   turnStartedAt = Date.now()
   clearInterval(coachTimer)
@@ -387,7 +408,7 @@ const hintTarget = computed<HTMLElement | null>(() => {
   if (h.target.kind === 'pile') return pileEl.value
   if (h.target.kind === 'colors') return swatchesEl.value
   if (h.target.kind === 'opponent') {
-    const first = state.value?.players.find((p) => p.id !== 'child')
+    const first = state.value?.players.find((p) => p.id !== meId.value)
     return first ? seatEls.get(first.id) ?? null : null
   }
   return handRefs.get(h.target.cardId) ?? null
@@ -396,20 +417,26 @@ const hintTarget = computed<HTMLElement | null>(() => {
 function dispatch(action: UnoAction) {
   const current = state.value
   if (!current) return
+  /* 联机：只把意图发上去，**绝不在本地先应用** ——
+     服务端算完广播回来，两台设备才不会各自漂走。 */
+  if (net) {
+    net.act(action)
+    return
+  }
   const next = applyAction(current, action)
   if (next === current) {
     playSfx('nope')
     return
   }
   // 孩子自己做对了一次，对应规则的熟练度 +1（做够几次提示就撤掉）
-  if (coachOn.value && currentPlayer(current) === 'child') {
+  if (coachOn.value && currentPlayer(current) === meId.value) {
     const played =
       action.type === 'play'
-        ? (current.hands.child ?? []).find((c) => c.id === action.cardId) ?? null
+        ? (current.hands[meId.value] ?? []).find((c) => c.id === action.cardId) ?? null
         : null
     settings.coachProgress = recordSuccess(settings.coachProgress, current, played)
   }
-  state.value = next
+  setState(next)
 }
 
 function tapCard(card: Card) {
@@ -471,7 +498,7 @@ watch(
     if (
       coachOn.value &&
       event?.type === 'draw' &&
-      event.playerId !== 'child' &&
+      event.playerId !== meId.value &&
       (settings.coachProgress.opponentDrew ?? 0) === 0
     ) {
       settings.coachProgress = {
@@ -485,19 +512,20 @@ watch(
       playSfx('flip')
       flyCard(anchorOf(event.playerId), discardEl.value, { card: event.card })
       if (previousState) {
-        narrateAfterPlay(previousState, event.card, event.playerId === 'child')
+        narrateAfterPlay(previousState, event.card, event.playerId === meId.value)
       }
     }
     if (event?.type === 'draw') {
       playSfx('tap')
-      const drawn = event.playerId === 'child' ? current.hands.child?.at(-1) : undefined
+      const drawn =
+        event.playerId === meId.value ? current.hands[meId.value]?.at(-1) : undefined
       flyCard(pileEl.value, anchorOf(event.playerId), drawn ? { card: drawn } : { back: true })
     }
 
     if (isFinished(current)) {
       playSfx('celebrate')
       // 说清楚"为什么结束了"—— 孩子出完最后一张牌时并不知道那就是赢
-      if (getWinner(current) === 'child') speakQueued('uno.win')
+      if (getWinner(current) === meId.value) speakQueued('uno.win')
       later(() => (showResult.value = true), WIN_CELEBRATE_MS)
       return
     }
