@@ -1,0 +1,28 @@
+{
+  /* Worker 跑在 Cloudflare 上，不是浏览器，也不是 Node —— 类型环境和 app 完全不同，
+     所以单独一份配置。app 的 tsconfig 不 include worker/，反过来也一样。 */
+  "compilerOptions": {
+    "target": "es2022",
+    "lib": ["es2022"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "types": ["@cloudflare/workers-types"],
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true
+  },
+  /*
+   * ⚠️ 逐个文件列，不要写 "src/net/**" ——
+   * `src/net/` 里混着两类东西：`protocol.ts` 是两边共用的，
+   * 而 `room-client.ts` 只在浏览器跑（要 document、要 Vue）。
+   * 用通配符会把浏览器的代码拉进 Worker 的类型环境，报一堆找不到 document。
+   */
+  "include": [
+    "worker/**/*.ts",
+    "src/net/protocol.ts",
+    "src/core/types.ts",
+    "src/core/rng.ts"
+  ]
+}

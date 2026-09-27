@@ -6,10 +6,28 @@
   "observability": {
     "enabled": true
   },
-  // 纯静态站：没有后端代码，部署就是把 dist/ 传上去
+  // 联机用的 Worker。/api/* 走它，其余全是静态资源
+  "main": "./worker/index.ts",
   "assets": {
     "directory": "./dist",
     // hash 路由 + PWA：任何未知路径都交给 index.html
-    "not_found_handling": "single-page-application"
-  }
+    "not_found_handling": "single-page-application",
+    "binding": "ASSETS",
+    /*
+     * ⚠️ 这一行必须有。默认是「静态资源优先」，而 not_found_handling 又把
+     * 所有没匹配上的路径都返回 index.html —— /api/* 会被 index.html 吞掉，
+     * 永远到不了 Worker。这里显式让 /api/* 先走 Worker。
+     */
+    "run_worker_first": ["/api/*"]
+  },
+  // 一个房间 = 一个 Durable Object，房间号就是它的名字
+  "durable_objects": {
+    "bindings": [{ "name": "ROOM", "class_name": "Room" }]
+  },
+  /*
+   * ⚠️ 必须是 new_sqlite_classes，不能用 new_classes ——
+   * **免费版只能用 SQLite 后端的 Durable Object**，键值后端要付费计划。
+   * 写错了部署时不报错，等到超额才发现。
+   */
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }]
 }

@@ -6,13 +6,15 @@
   "description": "给 5-6 岁小朋友的桌游/卡牌游戏合集（iPad PWA）",
   "scripts": {
     "dev": "vite",
-    "build": "vue-tsc --noEmit && vite build",
+    "build": "vue-tsc --noEmit && tsc -p tsconfig.worker.json && vite build",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "vue-tsc --noEmit",
     "deploy": "npm run build && wrangler deploy",
-    "build:pages": "vue-tsc --noEmit && vite build --base=/play_with_friends/ --outDir dist-pages"
+    "build:pages": "vue-tsc --noEmit && vite build --base=/play_with_friends/ --outDir dist-pages",
+    "typecheck:worker": "tsc -p tsconfig.worker.json",
+    "dev:net": "wrangler dev --port 8787 --local"
   },
   "dependencies": {
     "pinia": "^3.0.0",
@@ -21,6 +23,7 @@
     "vue-router": "^4.5.0"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260927.1",
     "@types/node": "^22.0.0",
     "@vitejs/plugin-vue": "^6.0.0",
     "typescript": "^5.6.0",
