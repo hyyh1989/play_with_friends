@@ -97,5 +97,9 @@
   },
   "dobble": {
     "symbols": "{n} pictures per card"
+  },
+  "net": {
+    "tellFriend": "Tell your friend these three",
+    "waitAMoment": "Just a moment"
   }
 }

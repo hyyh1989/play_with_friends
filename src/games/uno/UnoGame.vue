@@ -180,6 +180,12 @@ onUnmounted(clearTimers)
 onUnmounted(() => clearInterval(coachTimer))
 
 onMounted(() => {
+  /* 联机：开局设置归房间管（玩什么、几个人都定好了），直接进对局。
+     教学也跳过 —— 那副牌是写死的剧本，两个人联机时讲不通。 */
+  if (net) {
+    phase.value = 'playing'
+    return
+  }
   const needsTeaching = settings.tutorialEnabled && !allMastered(settings.coachProgress)
   if (needsTeaching) {
     phase.value = 'ask'
@@ -193,9 +199,19 @@ const activeId = computed(() => (state.value ? currentPlayer(state.value) : null
 const activePlayer = computed(
   () => state.value?.players.find((p) => p.id === activeId.value) ?? null,
 )
+/*
+ * ⚠️ 判据是「当前玩家**是不是我**」，不是「是不是真人」。
+ *
+ * 原来写的是 `kind === 'human'` —— 单机时只有一个真人，两者等价；
+ * 一联机两个座位都是真人，**两边就都以为轮到自己了**（实测中招）。
+ *
+ * ⚠️ 别顺手把四子棋/翻牌配对/找相同也改成这样：它们有「两个人一台设备轮流」
+ * 的模式，那里 `kind === 'human'` 才是对的 —— 谁都能点，因为是同一台机器。
+ * UNO 没有这个模式（手牌要藏着），所以只有它该按身份判。
+ */
 const myTurn = computed(
   () =>
-    activePlayer.value?.kind === 'human' &&
+    activePlayer.value?.id === meId.value &&
     !busy.value &&
     !finished.value &&
     introBeat.value === null,
@@ -234,6 +250,13 @@ function handCount(playerId: string): number {
 }
 
 function start() {
+  /* 联机时「再来一次」要两个人都点才算 —— 不能单方面开新局，
+     否则对方会在没准备好时被拖进去（用户定的规则）。 */
+  if (net) {
+    showResult.value = false
+    net.rematch()
+    return
+  }
   const players: PlayerRef[] = [{ id: 'child', kind: 'human', avatar: settings.avatar }]
   for (let i = 1; i < playerCount.value; i++) {
     // 电脑对手一律用机器人形象，和真人的小动物区分开
@@ -531,7 +554,9 @@ watch(
     }
 
     const player = current.players.find((p) => p.id === currentPlayer(current))
-    if (player?.kind !== 'ai') {
+    /* 联机时绝不在客户端跑 AI：两台设备各跑一遍会算出不同结果，局面直接分叉。
+       （现在联机的座位都是 human，走不到这里；这道护栏是给以后加"联机带 AI"的人留的） */
+    if (net || player?.kind !== 'ai') {
       busy.value = false
       turnStartedAt = Date.now()
       evaluateHint()

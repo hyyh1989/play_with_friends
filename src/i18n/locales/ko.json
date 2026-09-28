@@ -97,5 +97,9 @@
   },
   "dobble": {
     "symbols": "카드당 그림 {n}개"
+  },
+  "net": {
+    "tellFriend": "친구에게 이 세 개를 알려 줘",
+    "waitAMoment": "잠깐만 기다려"
   }
 }

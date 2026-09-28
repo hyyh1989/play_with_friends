@@ -3,6 +3,7 @@ import HomeView from '../views/HomeView.vue'
 import ParentView from '../views/ParentView.vue'
 import GameHostView from '../views/GameHostView.vue'
 import NetCheckView from '../views/NetCheckView.vue'
+import NetGameView from '../views/NetGameView.vue'
 import { getGame } from '../core/game-registry'
 
 /**
@@ -21,6 +22,8 @@ export const router = createRouter({
       // 没登记的游戏（比如还没做的）直接回首页，不让孩子看到空白页
       beforeEnter: (to) => (getGame(String(to.params.id)) ? true : { path: '/' }),
     },
+    /* 联机对局。?g=uno 指定玩什么，默认 uno */
+    { path: '/play/:code', name: 'netplay', component: NetGameView },
     /* 联机自检页。**首页不链接它**，是给我们排查用的工具，不是给孩子的入口 */
     { path: '/net/:code?', name: 'netcheck', component: NetCheckView },
     { path: '/:pathMatch(.*)*', redirect: '/' },

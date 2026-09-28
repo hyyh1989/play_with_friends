@@ -97,5 +97,9 @@
   },
   "dobble": {
     "symbols": "每张 {n} 个图案"
+  },
+  "net": {
+    "tellFriend": "把这三个告诉小伙伴",
+    "waitAMoment": "等一下哦"
   }
 }
