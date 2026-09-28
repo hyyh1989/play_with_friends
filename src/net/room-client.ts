@@ -108,9 +108,20 @@ export function connectRoom(opts: ConnectOptions): RoomConnection {
       }
     }
 
-    ws.onclose = () => {
+    ws.onclose = (ev) => {
       connected.value = false
       ws = null
+      /*
+       * 服务端说「你被同一个身份的新连接顶替了」—— **别再抢回来**。
+       * 抢回来的话两个窗口会无限互踢：A 连上踢掉 B、B 自动重连踢掉 A、…
+       * 实测每秒一个来回，日志刷屏，界面也跟着反复重画（2026-09-28 本地复现）。
+       * 同一台设备开两个窗口就会这样，因为 localStorage 是整个站点共用的，
+       * 两个窗口拿到的是同一个身份。
+       */
+      if (ev.reason === 'replaced') {
+        closed = true
+        return
+      }
       scheduleRetry()
     }
     ws.onerror = () => {

@@ -507,11 +507,40 @@ function drawCard() {
   dispatch({ type: 'draw' })
 }
 
+/*
+ * 这一步是**刚刚发生的**，还是我们一进来就看到的既成事实？
+ *
+ * `lastEvent` 是状态的一部分，而任何一次状态推送都会让下面的 watch 再跑一遍 ——
+ * 重连时服务端重发同一份状态，就会把最后那张牌**重新"打"一次**
+ * （用户实测：掉线回来必播一次，看起来像 bug；严重时来回重连会循环播）。
+ *
+ * 判据是「这个事件我播过没有」：出牌会让弃牌堆长一张，所以
+ * 事件 + 弃牌堆张数 合起来对每一次真实操作都是唯一的。
+ * 再加一条：**进来看到的第一份状态一律不播** —— 那是既成事实，不是刚发生的事。
+ */
+let lastAnimated = ''
+let adopted = false
+function eventKey(s: UnoState): string {
+  const e = s.lastEvent
+  if (!e) return ''
+  const card = e.type === 'play' ? e.card.id : ''
+  /* 光靠弃牌堆张数不够：摸牌不改弃牌堆。再带上所有人手牌总数 ——
+     出牌 -1、摸牌 +n，两者合起来对每一次真实操作都是唯一的。 */
+  const inHands = Object.values(s.hands).reduce((n, h) => n + h.length, 0)
+  return `${e.type}:${e.playerId}:${card}:${s.discardPile.length}:${inHands}`
+}
+
 watch(
   state,
   (current, previousState) => {
     if (!current) return
     clearTimers()
+
+    const key = eventKey(current)
+    /* 第一份状态只接管、不演；之后只演没演过的那一步 */
+    const isNew = adopted && key !== '' && key !== lastAnimated
+    adopted = true
+    lastAnimated = key
 
     // 「喊 UNO」整套去掉了：官方规则里它是个带罚牌的义务，对 5 岁孩子只是
     // 多一件会做错的事。剩一张的高亮也一并撤掉，避免暗示"这里该做点什么"。
@@ -519,6 +548,7 @@ watch(
     const event = current.lastEvent
     // 对手也摸牌了 —— 这一幕孩子看得见结果（它的牌变多了），值得点一句
     if (
+      isNew &&
       coachOn.value &&
       event?.type === 'draw' &&
       event.playerId !== meId.value &&
@@ -531,14 +561,14 @@ watch(
       clearTimeout(narrateTimer)
       narrateTimer = window.setTimeout(() => speakQueued('uno.opponentDrew'), 600)
     }
-    if (event?.type === 'play') {
+    if (isNew && event?.type === 'play') {
       playSfx('flip')
       flyCard(anchorOf(event.playerId), discardEl.value, { card: event.card })
       if (previousState) {
         narrateAfterPlay(previousState, event.card, event.playerId === meId.value)
       }
     }
-    if (event?.type === 'draw') {
+    if (isNew && event?.type === 'draw') {
       playSfx('tap')
       const drawn =
         event.playerId === meId.value ? current.hands[meId.value]?.at(-1) : undefined
@@ -546,9 +576,13 @@ watch(
     }
 
     if (isFinished(current)) {
-      playSfx('celebrate')
-      // 说清楚"为什么结束了"—— 孩子出完最后一张牌时并不知道那就是赢
-      if (getWinner(current) === meId.value) speakQueued('uno.win')
+      /* 结算页照常弹（重连进来也该看到谁赢了），但**庆祝音和那句话只在
+         亲眼看着它结束时才放** —— 断线回来又欢呼一次很怪。 */
+      if (isNew) {
+        playSfx('celebrate')
+        // 说清楚"为什么结束了"—— 孩子出完最后一张牌时并不知道那就是赢
+        if (getWinner(current) === meId.value) speakQueued('uno.win')
+      }
       later(() => (showResult.value = true), WIN_CELEBRATE_MS)
       return
     }

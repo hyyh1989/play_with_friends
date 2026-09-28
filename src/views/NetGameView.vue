@@ -71,12 +71,25 @@ function start() {
 watch(code, start, { immediate: true })
 onUnmounted(() => conn.value?.close())
 
-/* 服务端的快照是唯一真相：原样搬进上下文，不做任何加工 */
+/*
+ * 服务端的快照是唯一真相：原样搬进上下文。
+ *
+ * ⚠️ 唯一的加工是**内容没变就不重新赋值**。服务端在很多时机都会广播
+ * （有人进来、有人掉线、有人回来），这些时候游戏状态其实一个字没改；
+ * 但 shallowRef 认的是对象引用，重新赋值会把游戏的 watch 叫醒一遍，
+ * 于是最后那张牌被反复"打"出来（用户实测：重连时必播一次，来回重连会循环）。
+ */
+let lastStateJson = ''
 watch(
   () => conn.value?.room.value,
   (room) => {
     if (!room) return
-    state.value = room.state
+    const json = JSON.stringify(room.state ?? null)
+    if (json !== lastStateJson) {
+      lastStateJson = json
+      state.value = room.state
+    }
+    /* 房间信息每次都更新 —— 掉线/回来要立刻反映到界面上 */
     phase.value = room.phase
     seats.value = room.seats
     youIndex.value = room.youIndex
