@@ -137,6 +137,10 @@ export class Room implements DurableObject {
       seat.online = true
       seat.lastSeen = Date.now()
       seat.avatar = msg.avatar || seat.avatar
+      /* ⚠️ 顺序要紧：**先给新连接打上身份标记，再去踢旧的**。
+         反过来的话，踢旧连接时新连接还没有标记，下面 onGone 里
+         「是不是还有同名的活连接」就判不出来，人会被自己刚建立的连接踢下线。 */
+      ws.serializeAttachment({ playerId: msg.playerId } satisfies SocketTag)
       // 同一个人开了第二个窗口：把旧的那条踢掉，免得两边都在收广播
       for (const old of this.ctx.getWebSockets()) {
         if (old !== ws && tagOf(old)?.playerId === msg.playerId) {
@@ -153,6 +157,7 @@ export class Room implements DurableObject {
       room.seats.push(seat)
     }
 
+    // 新占座的那条连接也要打标记（重连那条上面已经打过了）
     ws.serializeAttachment({ playerId: msg.playerId } satisfies SocketTag)
 
     const everyoneHere = room.seats.length === SEATS && room.seats.every((s) => s.online)
@@ -218,6 +223,20 @@ export class Room implements DurableObject {
   private async onGone(ws: WebSocket) {
     const me = tagOf(ws)?.playerId
     if (!me) return
+    /*
+     * ⚠️ 这个人可能刚用新连接回来了 —— **旧连接的 close 事件是异步的，
+     * 常常比新连接的 join 晚到**。不判断就会把刚接回来的人立刻标成离线，
+     * 房间转回 paused，界面永远停在「等一下哦」那三个跳点上。
+     *
+     * 实测中招（2026-09-28 用户 iPad 实测）：手机在浏览器里关掉再打开没事
+     * （系统先干净地关了连接，close 排在 join 前面），
+     * 而 iPad 上关掉「添加到主屏幕」的 app 时连接常常还挂着，顺序正好反过来。
+     */
+    const stillHere = this.ctx
+      .getWebSockets()
+      .some((o) => o !== ws && tagOf(o)?.playerId === me)
+    if (stillHere) return
+
     const room = await this.read()
     if (!room) return
     const seat = room.seats.find((s) => s.playerId === me)

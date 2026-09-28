@@ -7,6 +7,8 @@ import AvatarPicker from '../components/AvatarPicker.vue'
 import { listGames } from '../core/game-registry'
 import { UPCOMING } from '../games'
 import { playSfx, speak } from '../core/audio'
+import { recentRoom } from '../net/room-client'
+import { codeToIcons } from '../net/protocol'
 import { useSettingsStore } from '../stores/settings'
 
 const router = useRouter()
@@ -14,6 +16,23 @@ const settings = useSettingsStore()
 const showAvatarPicker = ref(false)
 
 const games = listGames()
+
+/*
+ * 刚才在联机房间里没？
+ * 浏览器重开会自己回到原来那页，但**「添加到主屏幕」的 app 每次都从头开** ——
+ * iPad 一关一开就回到这里，房间号只能靠记（用户实测中招）。给一条回去的路。
+ * 只在服务端还留着局面的那 10 分钟内出现，过期了就不显示 —— 显示了也回不去。
+ */
+const back = ref(recentRoom())
+function resume() {
+  if (!back.value) return
+  playSfx('tap')
+  router.push({
+    name: 'netplay',
+    params: { code: back.value.code },
+    query: { g: back.value.gameId },
+  })
+}
 
 /**
  * 首页排几列。
@@ -48,6 +67,14 @@ function tapUpcoming(id: string) {
       <SettingsButton @click="router.push({ name: 'parent' })" />
     </header>
 
+    <!-- 回到刚才的房间。放在游戏格子上面：它是"接着刚才那件事"，比重新挑一个游戏更急 -->
+    <button v-if="back" class="resume pressable" @click="resume">
+      <span class="resume-t">{{ $t('net.backToRoom') }}</span>
+      <span class="resume-code">
+        <i v-for="(ic, i) in codeToIcons(back.code)" :key="i">{{ ic }}</i>
+      </span>
+    </button>
+
     <main class="grid" :style="{ '--cols': columns }">
       <GameCard
         v-for="game in games"
@@ -69,6 +96,33 @@ function tapUpcoming(id: string) {
 </template>
 
 <style scoped>
+.resume {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(10px, 2.5vmin, 22px);
+  margin: 0 auto 6px;
+  padding: clamp(10px, 2vmin, 16px) clamp(16px, 4vmin, 30px);
+  background: var(--accent-2);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.resume-t {
+  font-size: clamp(14px, 2.2vmin, 19px);
+  font-weight: 700;
+  color: #fff;
+}
+.resume-code {
+  display: flex;
+  gap: 6px;
+}
+.resume-code i {
+  font-size: clamp(24px, 4.5vmin, 38px);
+  font-style: normal;
+  line-height: 1;
+  font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
+}
+
 .home {
   display: flex;
   flex-direction: column;

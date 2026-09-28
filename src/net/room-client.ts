@@ -1,4 +1,5 @@
 import { ref, shallowRef, type Ref, type ShallowRef } from 'vue'
+import { KEEP_ALIVE_MS } from './protocol'
 import type { ClientMessage, RoomSnapshot, ServerMessage, ErrorCode } from './protocol'
 
 /**
@@ -181,4 +182,41 @@ export async function createRoomCode(): Promise<string> {
   if (!res.ok) throw new Error('开房失败')
   const { code } = (await res.json()) as { code: string }
   return code
+}
+
+/* ── 记住刚才在哪个房间 ──────────────────────────────────
+   浏览器重开会自己回到原来那一页，但**「添加到主屏幕」的 app 每次都从头开**
+   （start_url），于是 iPad 一关一开就忘了自己在哪个房间（用户实测中招）。
+   存一下，首页给一条回去的路。
+
+   有效期和服务端保留局面的时间一致（10 分钟）—— 过了那个点房间已经被清掉了，
+   再给「回去」的入口就是骗人。 */
+const LAST_ROOM_KEY = 'pwf.lastRoom'
+
+export function rememberRoom(code: string, gameId: string): void {
+  try {
+    localStorage.setItem(LAST_ROOM_KEY, JSON.stringify({ code, gameId, at: Date.now() }))
+  } catch {
+    /* 存不了就算了，只是少一条捷径 */
+  }
+}
+
+export function forgetRoom(): void {
+  try {
+    localStorage.removeItem(LAST_ROOM_KEY)
+  } catch {
+    /* 同上 */
+  }
+}
+
+export function recentRoom(): { code: string; gameId: string } | null {
+  try {
+    const raw = localStorage.getItem(LAST_ROOM_KEY)
+    if (!raw) return null
+    const v = JSON.parse(raw) as { code: string; gameId: string; at: number }
+    if (!v?.code || Date.now() - (v.at || 0) > KEEP_ALIVE_MS) return null
+    return { code: v.code, gameId: v.gameId || 'uno' }
+  } catch {
+    return null
+  }
 }

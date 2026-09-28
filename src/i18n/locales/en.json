@@ -104,6 +104,7 @@
     "openRoom": "Open a room",
     "joinRoom": "Join a room",
     "tapThree": "Tap the three your friend says",
-    "withFriend": "Play with a friend"
+    "withFriend": "Play with a friend",
+    "backToRoom": "Back to your room"
   }
 }

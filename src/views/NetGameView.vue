@@ -4,7 +4,13 @@ import { useRoute, useRouter } from 'vue-router'
 import { getGame } from '../core/game-registry'
 import { useSettingsStore } from '../stores/settings'
 import { codeToIcons } from '../net/protocol'
-import { connectRoom, myPlayerId, type RoomConnection } from '../net/room-client'
+import {
+  connectRoom,
+  forgetRoom,
+  myPlayerId,
+  rememberRoom,
+  type RoomConnection,
+} from '../net/room-client'
 import { GAME_NET, type GameNet } from '../net/game-net'
 
 /**
@@ -52,6 +58,8 @@ provide(GAME_NET, net)
 
 function start() {
   if (!code.value || !game.value) return
+  /* 记一下在哪个房间：主屏幕启动的 app 每次都从头开，不记的话一关一开就找不回来了 */
+  rememberRoom(code.value, gameId.value)
   conn.value?.close()
   conn.value = connectRoom({
     code: code.value,
@@ -79,6 +87,12 @@ watch(
   (v) => (connected.value = !!v),
 )
 
+/** 自己走掉：这是有意退出，别再给「回到刚才的房间」的入口 */
+function leave() {
+  forgetRoom()
+  router.push('/')
+}
+
 /** 掉线的是谁（用来显示"等一下哦"时把他的头像变灰） */
 const awayFor = computed(() => seats.value.find((s) => !s.online) ?? null)
 </script>
@@ -87,9 +101,7 @@ const awayFor = computed(() => seats.value.find((s) => !s.online) ?? null)
   <div class="netgame">
     <!-- 等人：房间号要大，这是要念给对方听的（"小熊、火箭、星星"） -->
     <div v-if="phase === 'waiting'" class="wait safe-area">
-      <button class="corner-back pressable" :aria-label="$t('common.back')" @click="router.push('/')">
-        ←
-      </button>
+      <button class="corner-back pressable" :aria-label="$t('common.back')" @click="leave">←</button>
       <p class="wait-t">{{ $t('net.tellFriend') }}</p>
       <div class="code">
         <span v-for="(ic, i) in codeToIcons(code)" :key="i" class="code-ic">{{ ic }}</span>
