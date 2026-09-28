@@ -36,6 +36,7 @@ npm run typecheck   # 只做类型检查
 |---|---|---|---|
 | **https://play-with-friends.pages.dev** | `npm run deploy:cf-pages` | ✅ | **日常就用这个**，大陆也能直连 |
 | https://play.xiaotangyuan.workers.dev | `npm run deploy` | ✅ | 开发/备用。**大陆打不开** |
+| ⬆️ 两个一起发 | **`npm run deploy:all`** | | **平时用这条** |
 | https://hyyh1989.github.io/play_with_friends/ | 推 main 自动发 | ❌ | 老的应急镜像，pages.dev 站稳后可以退役 |
 
 **为什么是这个格局**：`workers.dev` 这个域名在某些网络下被**整域名屏蔽**（常被拿来搭
@@ -65,6 +66,10 @@ worker/env.ts      ← 绑定类型。单独一个文件，好让 app.ts 不必 
 ⚠️ **`play` 这个 Worker 永远不能删。** `Room` 类定义在它里面，Pages 只是绑过来用
 （`cf-pages/wrangler.jsonc` 里的 `script_name: "play"`）。就算以后大家都只开 pages.dev，
 删掉那个 Worker = 所有房间的实现没了 = 联机全挂。
+
+⚠️ **发版要用 `npm run deploy:all` 两个一起发。** `app.ts` 只保证**路由**一致，
+但两个部署各自带一份前端代码 —— 只发一边，跨域名一起玩的两个人就跑着**不同版本的前端**，
+而房间是共享的。坏起来的样子是"偶尔卡住"，不是报错，很难查。
 
 ⚠️ **路由只能写在 `app.ts` 一份。** 抄一份到另一个入口里，两边就会慢慢长歪 ——
 而联机是有协议的，**版本不一致坏起来很难查**（一边发的动作另一边不认识，
