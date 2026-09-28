@@ -30,17 +30,67 @@ npm run test:watch  # 单元测试 watch 模式
 npm run typecheck   # 只做类型检查
 ```
 
-**线上地址**（两个，内容一致）：
-- 主站 https://play.xiaotangyuan.workers.dev （Cloudflare）—— `npm run deploy` 手动发
-- 镜像 https://hyyh1989.github.io/play_with_friends/ （GitHub Pages）—— 推到 main 自动发
+**线上地址**（三个，内容一致，但**能力不一样**）：
 
-**为什么要两个**：`workers.dev` 这个域名在某些网络下被整域名屏蔽（常被拿来搭反向代理），
-**中国大陆**的朋友打不开主站（2026-09-28 用户更正：以前这里错记成"韩国朋友"，
-韩国那位其实人在马来西亚，和用户一样能直接打开）。镜像是完全不同的域名，哪个能开用哪个。
+| 地址 | 发布方式 | 联机 | 给谁用 |
+|---|---|---|---|
+| **https://play-with-friends.pages.dev** | `npm run deploy:cf-pages` | ✅ | **日常就用这个**，大陆也能直连 |
+| https://play.xiaotangyuan.workers.dev | `npm run deploy` | ✅ | 开发/备用。**大陆打不开** |
+| https://hyyh1989.github.io/play_with_friends/ | 推 main 自动发 | ❌ | 老的应急镜像，pages.dev 站稳后可以退役 |
 
-⚠️ **但镜像给不了联机** —— GitHub Pages 是纯静态托管，没有后端，`/api/*` 不存在。
-所以对大陆那位朋友来说，镜像只能单机玩。远程联机要么让主站可达（换自己的域名，
-不保证），要么就没辙 —— 境内托管要 ICP 备案，而备案要境内主体。
+**为什么是这个格局**：`workers.dev` 这个域名在某些网络下被**整域名屏蔽**（常被拿来搭
+反向代理），中国大陆的朋友打不开；而 `*.pages.dev` 能直连（2026-09-28 实测，
+用户的 hanzi-writing.pages.dev 一直可用）。
+（2026-09-28 用户更正：以前这里错记成"韩国朋友"，韩国那位其实人在马来西亚，
+和用户一样能直接打开。真正受影响的只有大陆那位。）
+
+⚠️ **GitHub 镜像给不了联机** —— 纯静态托管，没有后端，`/api/*` 不存在，只能单机玩。
+这也是它当初唯一的作用；pages.dev **既能打开又能联机**，所以它已经没有用户了。
+
+### 两个 Cloudflare 部署是怎么共存的（2026-09-28）
+
+**`play-with-friends.pages.dev` 和 `play.xiaotangyuan.workers.dev` 上的人能进同一个房间。**
+已实测：一个人从 workers.dev 开房、另一个人从 pages.dev 用同一个房间码进去，
+两边都收到快照、自动开局（`tests/` 之外的一次性脚本，没留在仓库里）。
+
+靠的是两个部署绑**同一个 Durable Object 命名空间**：
+
+```
+worker/app.ts      ← 路由逻辑，两个部署共用的唯一一份
+worker/index.ts    ← workers.dev 入口：export { Room } + fetch
+worker/pages.ts    ← Pages 入口：只有 fetch，构建成 dist/_worker.js
+worker/env.ts      ← 绑定类型。单独一个文件，好让 app.ts 不必 import room.ts
+```
+
+⚠️ **`play` 这个 Worker 永远不能删。** `Room` 类定义在它里面，Pages 只是绑过来用
+（`cf-pages/wrangler.jsonc` 里的 `script_name: "play"`）。就算以后大家都只开 pages.dev，
+删掉那个 Worker = 所有房间的实现没了 = 联机全挂。
+
+⚠️ **路由只能写在 `app.ts` 一份。** 抄一份到另一个入口里，两边就会慢慢长歪 ——
+而联机是有协议的，**版本不一致坏起来很难查**（一边发的动作另一边不认识，
+表现是"偶尔卡住"而不是报错）。入口文件只负责"带不带 Room"。
+
+**发 Pages 时踩过的三个坑：**
+
+1. **`wrangler pages deploy` 不支持 `-c/--config`**，配置必须叫 `wrangler.jsonc` 且在
+   当前目录 —— 和 Workers 那份撞名。所以 Pages 的配置放在 `cf-pages/` 子目录，
+   里面写 `"pages_build_output_dir": "../dist"`（**指到上一级是可以的**，试过）。
+   发布要 `cd cf-pages`，`npm run deploy:cf-pages` 已经处理好了。
+2. **Pages 的 DO 绑定必须带 `script_name`**（Workers 里可以不写）——
+   因为 Pages 项目**没有能力定义** DO 类，只能绑已经存在的。不写直接部署失败。
+3. **`wrangler pages project create` 现在会默默转成 Workers 部署**
+   （"Pages 已并入 Workers"），那样会拿到 `workers.dev` 域名，**正好是要避开的那个**。
+   建项目那一次要加 `--force`。⚠️ 建完之后就**不要再加 `--force`**，
+   后续 deploy 不会被转走。
+
+`dist/` 是两个部署共用的输出目录，Pages 会多一个 `dist/_worker.js`。
+`npm run deploy`（workers.dev）会先 `rm -f dist/_worker.js` —— 不然它会被当成
+一个静态资源传上去。（`vite build` 本来就会清空 dist，这行是双保险。）
+
+⚠️ **localStorage 按域名隔离。** 换域名 = 头像、UNO 等级、教学进度、身份（playerId）
+全部重来，iPad 上的快捷方式也要**删掉重加**。这不是 bug，是 Web 的规矩。
+所以「换个主力域名」这件事有一次性成本，别反复换。
+
 镜像挂在 `/play_with_friends/` 子路径下，所以**任何资源路径都不能写死成 `/xxx`**，
 要用 `import.meta.env.BASE_URL` 前缀（音频就踩过这个坑）。
 

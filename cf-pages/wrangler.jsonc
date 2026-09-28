@@ -1,0 +1,33 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  /*
+   * Cloudflare Pages 的配置 —— 和 `wrangler.jsonc`（Workers）是**两个部署**。
+   *
+   * 为什么要有两份：**中国大陆能不连 VPN 打开 `*.pages.dev`，打不开 `*.workers.dev`。**
+   * 小朋友用哪个都行，朋友只能走 pages.dev。
+   *
+   * ⚠️ 两个部署绑的是**同一个房间命名空间**（下面的 script_name），
+   * 所以两个域名上的人能进**同一个房间**。别新建命名空间。
+   *
+   * 发布：`npm run deploy:cf-pages`
+   */
+  // 域名就是这个名字：play-with-friends.pages.dev
+  "name": "play-with-friends",
+  /*
+   * ⚠️ Pages 用 `pages_build_output_dir`，**没有 `main`** ——
+   * 入口是约定好的：输出目录根下的 `_worker.js`（advanced mode）。
+   * 那个文件由 `build:cf-pages` 用 esbuild 从 `worker/pages.ts` 生成，不是手写的。
+   */
+  "pages_build_output_dir": "../dist",
+  "compatibility_date": "2026-09-21",
+  /*
+   * ⚠️ **`script_name` 在 Pages 里是必填的**（Workers 里可以不写）——
+   * 因为 Pages 项目**没有能力定义** Durable Object 类，只能绑到别人定义好的。
+   * `play` 就是 wrangler.jsonc 里那个 Worker，`Room` 定义在它的 worker/room.ts。
+   * 也正因为如此：**那个 Worker 永远不能删**，删了这里就绑空了。
+   */
+  "durable_objects": {
+    "bindings": [{ "name": "ROOM", "class_name": "Room", "script_name": "play" }]
+  }
+  /* 这里没有 "migrations" —— 建表是定义方（那个 Worker）的事，绑定方不参与 */
+}

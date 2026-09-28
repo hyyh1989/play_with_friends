@@ -8,6 +8,7 @@ import {
 } from '../src/net/protocol'
 import type { GameConfig, PlayerRef } from '../src/core/types'
 import { rulesFor, type GameRules } from './games'
+import type { Env } from './env'
 
 /**
  * 一个房间 = 一个 Durable Object。
@@ -28,10 +29,9 @@ import { rulesFor, type GameRules } from './games'
  * `paused` 是「有人掉线」，**局面完整保留**。这不是异常分支，是最常发生的一条路。
  */
 
-export interface Env {
-  ROOM: DurableObjectNamespace
-  ASSETS: Fetcher
-}
+/* `Env` 搬到了 `env.ts` —— Pages 的入口要拿这个类型，但不能拿到 Room 的实现。
+   这里 re-export 一下，原来 `import { Room, type Env } from './room'` 的写法照常用。 */
+export type { Env }
 
 interface Seat {
   playerId: string

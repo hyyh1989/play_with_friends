@@ -11,8 +11,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "vue-tsc --noEmit",
-    "deploy": "npm run build && wrangler deploy",
+    "deploy": "npm run build && rm -f dist/_worker.js && wrangler deploy",
     "build:pages": "vue-tsc --noEmit && vite build --base=/play_with_friends/ --outDir dist-pages",
+    "build:cf-pages": "npm run build && esbuild worker/pages.ts --bundle --format=esm --target=es2022 --outfile=dist/_worker.js",
+    "deploy:cf-pages": "npm run build:cf-pages && cd cf-pages && wrangler pages deploy",
     "typecheck:worker": "tsc -p tsconfig.worker.json",
     "dev:net": "wrangler dev --port 8787 --local"
   },
