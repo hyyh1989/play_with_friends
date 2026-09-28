@@ -9,14 +9,14 @@
    * ⚠️ 两个部署绑的是**同一个房间命名空间**（下面的 script_name），
    * 所以两个域名上的人能进**同一个房间**。别新建命名空间。
    *
-   * 发布：`npm run deploy:cf-pages`
+   * 发布：`npm run deploy:all`（两个域名一起，**平时用这条**）
    */
   // 域名就是这个名字：play-with-friends.pages.dev
   "name": "play-with-friends",
   /*
    * ⚠️ Pages 用 `pages_build_output_dir`，**没有 `main`** ——
    * 入口是约定好的：输出目录根下的 `_worker.js`（advanced mode）。
-   * 那个文件由 `build:cf-pages` 用 esbuild 从 `worker/pages.ts` 生成，不是手写的。
+   * 那个文件由 `up:cf-pages` 用 esbuild 从 `worker/pages.ts` 生成，不是手写的。
    */
   "pages_build_output_dir": "../dist",
   "compatibility_date": "2026-09-21",
