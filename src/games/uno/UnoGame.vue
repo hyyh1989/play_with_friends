@@ -85,6 +85,17 @@ let coachTimer: number | undefined
 let lastVoice = ''
 const playerCount = ref(2)
 /*
+ * 选人分两层：**先选和谁玩，再选几个人**。
+ *
+ * 原来是一层，把「几个机器人」和「和朋友玩」并排放 —— 但它们根本不是
+ * 同一类选择，所以「和朋友玩」怎么摆都别扭（用户实测：看起来像已经选中了）。
+ * 那不是样式问题，是信息结构没理顺的症状。
+ *
+ * 理顺之后两边的第二层长得一样、含义也一样，孩子学一次就会。
+ */
+const setupStep = ref<'who' | 'count'>('who')
+const vsWho = ref<'ai' | 'friend'>('ai')
+/*
  * ── 联机 ──
  * 注得到 net = 正在和别人联机：**状态由服务端说了算**，这里只显示；
  * 注不到 = 一个人玩，还是原来那套。
@@ -247,6 +258,16 @@ function dimmed(card: Card): boolean {
 
 function handCount(playerId: string): number {
   return state.value?.hands[playerId]?.length ?? 0
+}
+
+/** 第二层的 ▶：和电脑玩就直接开局，和朋友玩就去开房/加入 */
+function onGo() {
+  if (vsWho.value === 'friend') {
+    playSfx('tap')
+    router.push({ name: 'lobby', query: { n: playerCount.value } })
+    return
+  }
+  start()
 }
 
 function start() {
@@ -650,41 +671,58 @@ function goHome() {
   </div>
 
   <div v-else-if="phase === 'setup'" class="setup safe-area">
-    <button class="corner-back pressable" :aria-label="$t('common.back')" @click="goHome">←</button>
-    <div class="choices">
-      <button
-        v-for="count in [2, 3, 4]"
-        :key="count"
-        class="choice pressable"
-        :class="{ active: playerCount === count }"
-        :aria-label="$t(`snakes.players${count}`)"
-        @click="playerCount = count"
-      >
-        <span class="mode-avatars">
-          <template v-for="n in count" :key="n">
-            <span v-if="n === 2" class="vs">VS</span>
-            <span class="mode-avatar">{{ n === 1 ? settings.avatar : AI_AVATARS[n - 2] }}</span>
-          </template>
-        </span>
-      </button>
-    </div>
-
-    <!--
-      和朋友玩。放在人数选择下面而不是首页：她来这一屏就是要玩 UNO，
-      「和谁玩」是同一个决定的两半。
-      ⚠️ UNO 是四个游戏里唯一需要两台设备的（手牌要各自藏着），
-      所以只有它有这个入口。
-    -->
-    <button class="friend-go pressable" @click="router.push('/lobby')">
-      <span class="mode-avatars">
-        <span class="mode-avatar">{{ settings.avatar }}</span>
-        <span class="vs">VS</span>
-        <span class="mode-avatar">📱</span>
-      </span>
-      <span class="friend-t">{{ $t('net.withFriend') }}</span>
-      <span class="friend-arrow">→</span>
+    <button
+      class="corner-back pressable"
+      :aria-label="$t('common.back')"
+      @click="setupStep === 'count' ? (setupStep = 'who') : goHome()"
+    >
+      ←
     </button>
-    <button class="go pressable" @click="start">▶</button>
+
+    <!-- 第一层：和谁玩 -->
+    <template v-if="setupStep === 'who'">
+      <div class="two-who">
+        <button
+          class="who-card pressable"
+          @click="((vsWho = 'ai'), (setupStep = 'count'), playSfx('tap'))"
+        >
+          <span class="who-art">{{ settings.avatar }}<i class="vs">VS</i>🤖</span>
+          <span class="who-t">{{ $t('net.vsComputer') }}</span>
+        </button>
+        <button
+          class="who-card pressable"
+          @click="((vsWho = 'friend'), (setupStep = 'count'), playSfx('tap'))"
+        >
+          <span class="who-art">{{ settings.avatar }}<i class="vs">VS</i>📱</span>
+          <span class="who-t">{{ $t('net.withFriend') }}</span>
+        </button>
+      </div>
+    </template>
+
+    <!-- 第二层：几个人。两边长得一样，只是 ▶ 去的地方不同 -->
+    <template v-else>
+      <p class="count-t">{{ $t('net.howMany') }}</p>
+      <div class="choices">
+        <button
+          v-for="count in [2, 3, 4]"
+          :key="count"
+          class="choice pressable"
+          :class="{ active: playerCount === count }"
+          :aria-label="$t(`snakes.players${count}`)"
+          @click="playerCount = count"
+        >
+          <span class="mode-avatars">
+            <template v-for="n in count" :key="n">
+              <span v-if="n === 2" class="vs">VS</span>
+              <span class="mode-avatar">{{
+                n === 1 ? settings.avatar : vsWho === 'ai' ? AI_AVATARS[n - 2] : '📱'
+              }}</span>
+            </template>
+          </span>
+        </button>
+      </div>
+      <button class="go pressable" @click="onGo">▶</button>
+    </template>
   </div>
 
   <div v-else class="game safe-area">
@@ -806,37 +844,41 @@ function goHome() {
 
 <style scoped>
 /* 「和朋友玩」和上面的人数选项区分开：它去的是另一条路（两台设备），不是选人数 */
-/*
- * ⚠️ 这个按钮**不是**上面那组单选项的一员：点它是**去另一个页面**，
- * 不是「选中它、然后按 ▶」。所以它绝不能长得像 `.choice`。
- *
- * 实测中招（2026-09-28 用户报）：我原来给它套了 `.choice` 再加
- * `border-color: var(--accent-2)` 当装饰 —— 而那**正好就是 `.choice.active`
- * （已选中）的样子**。用户以为默认已经选了"和朋友玩"，直接按 ▶，
- * 结果开的是和电脑玩。
- *
- * 现在改成**实心胶囊 + 箭头**：和"白卡片 + 绿边框"这套选中语言彻底分开，
- * 一眼看出它是"去某个地方"，不是"选哪一个"。
- */
-.friend-go {
+/* 第一层：和谁玩。两张同样大的卡，是并列的两条路，不是"选中一个再按 ▶" */
+.two-who {
+  display: flex;
+  gap: clamp(14px, 4vmin, 38px);
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.who-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: clamp(18px, 4vmin, 34px) clamp(20px, 5vmin, 44px);
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+}
+.who-art {
   display: flex;
   align-items: center;
-  gap: clamp(8px, 1.6vmin, 14px);
-  margin-top: clamp(4px, 1.5vmin, 14px);
-  padding: clamp(10px, 2vmin, 16px) clamp(16px, 3vmin, 26px);
-  color: #fff;
-  background: var(--accent-2);
-  border-radius: 999px;
-  box-shadow: var(--shadow);
+  gap: 8px;
+  font-size: clamp(34px, 8vmin, 60px);
+  line-height: 1;
+  font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
 }
-.friend-t {
-  font-size: clamp(13px, 2vmin, 17px);
+.who-art .vs {
+  font-family: var(--body, sans-serif);
+}
+.who-t {
+  font-size: clamp(14px, 2.2vmin, 19px);
   font-weight: 700;
 }
-.friend-arrow {
-  font-size: clamp(15px, 2.2vmin, 20px);
-  font-weight: 800;
-  opacity: 0.85;
+.count-t {
+  font-size: clamp(14px, 2.2vmin, 19px);
+  color: var(--ink-soft);
 }
 
 .setup {

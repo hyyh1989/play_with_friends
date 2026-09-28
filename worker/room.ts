@@ -1,6 +1,6 @@
 import {
+  clampSeats,
   KEEP_ALIVE_MS,
-  SEATS,
   type ClientMessage,
   type RoomPhase,
   type RoomSnapshot,
@@ -43,6 +43,8 @@ interface Seat {
 interface RoomData {
   code: string
   gameId: string
+  /** 这个房间打算几个人玩。以前是全局常量，那等于假设所有房间都是两人 */
+  size: number
   variant?: Record<string, unknown>
   seats: Seat[]
   phase: RoomPhase
@@ -101,6 +103,7 @@ export class Room implements DurableObject {
     if (msg.t === 'join') return this.onJoin(ws, msg)
     if (msg.t === 'action') return this.onAction(ws, msg.action)
     if (msg.t === 'rematch') return this.onRematch(ws)
+    if (msg.t === 'startNow') return this.onStartNow(ws)
   }
 
   async webSocketClose(ws: WebSocket): Promise<void> {
@@ -122,6 +125,7 @@ export class Room implements DurableObject {
       room = {
         code,
         gameId,
+        size: clampSeats(msg.size),
         variant: msg.variant,
         seats: [],
         phase: 'waiting',
@@ -152,7 +156,7 @@ export class Room implements DurableObject {
         }
       }
     } else {
-      if (room.seats.length >= SEATS) return send(ws, { t: 'error', code: 'full' })
+      if (room.seats.length >= room.size) return send(ws, { t: 'error', code: 'full' })
       seat = { playerId: msg.playerId, avatar: msg.avatar, online: true, lastSeen: Date.now() }
       room.seats.push(seat)
     }
@@ -160,7 +164,7 @@ export class Room implements DurableObject {
     // 新占座的那条连接也要打标记（重连那条上面已经打过了）
     ws.serializeAttachment({ playerId: msg.playerId } satisfies SocketTag)
 
-    const everyoneHere = room.seats.length === SEATS && room.seats.every((s) => s.online)
+    const everyoneHere = room.seats.length >= room.size && room.seats.every((s) => s.online)
     if (everyoneHere && room.phase === 'waiting') {
       room.state = this.newGame(room)
       room.phase = 'playing'
@@ -215,6 +219,24 @@ export class Room implements DurableObject {
       room.phase = 'playing'
       room.rematch = []
     }
+    await this.write(room)
+    this.broadcast(room)
+  }
+
+  /* ── 「就这些人，开始吧」──────────────────────────
+     第三个人可能永远不来（手机没电、跑去玩别的）。没有这条兜底，
+     房间就会卡死在等人页上 —— 而那是「几个人」这件事在真人身上
+     和在电脑身上最大的不同：它是承诺，不是选择。 */
+  private async onStartNow(ws: WebSocket) {
+    const room = await this.read()
+    if (!room || room.phase !== 'waiting') return
+    const me = tagOf(ws)?.playerId
+    // 只有房主（第一个进门的人）能按，而且至少得有两个人
+    if (!me || room.seats[0]?.playerId !== me || room.seats.length < 2) return
+
+    room.size = room.seats.length // 就按现在这些人开
+    room.state = this.newGame(room)
+    room.phase = 'playing'
     await this.write(room)
     this.broadcast(room)
   }
@@ -290,6 +312,7 @@ export class Room implements DurableObject {
       const snap: RoomSnapshot = {
         code: room.code,
         gameId: room.gameId,
+        size: room.size,
         phase: room.phase,
         seats: room.seats.map((s) => ({
           playerId: s.playerId,

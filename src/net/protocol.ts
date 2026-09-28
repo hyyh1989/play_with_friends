@@ -73,6 +73,8 @@ export interface SeatInfo {
 export interface RoomSnapshot {
   code: RoomCode
   gameId: string
+  /** 这个房间打算几个人玩 */
+  size: number
   phase: RoomPhase
   seats: SeatInfo[]
   /** 收到这条消息的人是第几号座位 */
@@ -98,11 +100,18 @@ export type ClientMessage =
       avatar: string
       gameId?: string
       variant?: Record<string, unknown>
+      /** 打算几个人玩。和 gameId 一样，只有【第一个进门的人】说了算 */
+      size?: number
     }
   /** 我要做这个动作。服务端会自己校验合不合法，客户端的校验只是为了少发废包 */
   | { t: 'action'; action: unknown }
   /** 再来一次 */
   | { t: 'rematch' }
+  /**
+   * 「就这些人，开始吧」—— 人没齐也先开。
+   * 只有第一个进门的人（房主）能按，而且至少要有两个人。
+   */
+  | { t: 'startNow' }
 
 /** 服务端 → 客户端 */
 export type ServerMessage =
@@ -122,5 +131,21 @@ export type ErrorCode =
 /** 掉线之后局面保留多久。到点房间自己清掉 */
 export const KEEP_ALIVE_MS = 10 * 60 * 1000
 
-/** 先只做两个人。座位数写成常量是为了以后加人时有个明确的地方改 */
-export const SEATS = 2
+/** 一个房间最多几个人 */
+export const MAX_SEATS = 4
+/** 默认几个人 */
+export const DEFAULT_SEATS = 2
+
+/**
+ * 这个房间打算几个人玩。**由建房的人定，存在房间里** ——
+ * 以前是全局常量 `SEATS = 2`，那等于假设所有房间都是两个人。
+ *
+ * ⚠️ 对电脑来说「几个」是一个**选择**，立刻就能满足；
+ * 对真人来说「几个」是一个**承诺**，要靠别人兑现 —— 第三个人可能永远不来。
+ * 所以等人页必须有「就这些人，开始吧」这条兜底，别让房间卡死在等人上。
+ */
+export function clampSeats(n: unknown): number {
+  const v = Math.round(Number(n))
+  if (!Number.isFinite(v)) return DEFAULT_SEATS
+  return Math.min(MAX_SEATS, Math.max(2, v))
+}

@@ -46,6 +46,8 @@ export interface RoomConnection {
   send(msg: ClientMessage): void
   act(action: unknown): void
   rematch(): void
+  /** 「就这些人，开始吧」 */
+  startNow(): void
   close(): void
 }
 
@@ -54,6 +56,8 @@ export interface ConnectOptions {
   gameId: string
   avatar: string
   variant?: Record<string, unknown>
+  /** 打算几个人玩。只有建房那个人说了算，后面进来的带了也会被忽略 */
+  size?: number
 }
 
 export function connectRoom(opts: ConnectOptions): RoomConnection {
@@ -104,6 +108,7 @@ export function connectRoom(opts: ConnectOptions): RoomConnection {
         avatar: opts.avatar,
         gameId: opts.gameId,
         variant: opts.variant,
+        size: opts.size,
       })
     }
 
@@ -203,6 +208,7 @@ export function connectRoom(opts: ConnectOptions): RoomConnection {
     send,
     act: (action: unknown) => send({ t: 'action', action }),
     rematch: () => send({ t: 'rematch' }),
+    startNow: () => send({ t: 'startNow' }),
     close() {
       closed = true
       clearTimer()

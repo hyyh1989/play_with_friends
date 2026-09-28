@@ -33,6 +33,8 @@ const settings = useSettingsStore()
 
 const code = computed(() => String(route.params.code || ''))
 const gameId = computed(() => String(route.query.g || 'uno'))
+/** 建房时带上的人数。加入别人的房间时这个值没用（房间已经定好了） */
+const wantSize = computed(() => Number(route.query.n) || undefined)
 const game = computed(() => getGame(gameId.value))
 
 const conn = shallowRef<RoomConnection | null>(null)
@@ -66,6 +68,7 @@ function start() {
     gameId: gameId.value,
     avatar: settings.avatar,
     variant: gameId.value === 'uno' ? { level: settings.unoLevel } : undefined,
+    size: wantSize.value,
   })
 }
 watch(code, start, { immediate: true })
@@ -108,6 +111,15 @@ function leave() {
 
 /** 掉线的是谁（用来显示"等一下哦"时把他的头像变灰） */
 const awayFor = computed(() => seats.value.find((s) => !s.online) ?? null)
+
+/** 这个房间打算几个人 */
+const size = computed(() => conn.value?.room.value?.size ?? 2)
+/** 还差几个人 */
+const missing = computed(() => Math.max(0, size.value - seats.value.length))
+/** 我是不是房主（第一个进门的那个）。只有房主能提前开局 */
+const isHost = computed(() => youIndex.value === 0)
+/** 人没齐但已经够两个人了，房主可以先开 */
+const canStartNow = computed(() => isHost.value && seats.value.length >= 2 && missing.value > 0)
 </script>
 
 <template>
@@ -119,7 +131,19 @@ const awayFor = computed(() => seats.value.find((s) => !s.online) ?? null)
       <div class="code">
         <span v-for="(ic, i) in codeToIcons(code)" :key="i" class="code-ic">{{ ic }}</span>
       </div>
-      <div class="dots"><i /><i /><i /></div>
+
+      <!-- 已经来了谁 + 还差几个。空位画成虚线圈，不认字也数得出来 -->
+      <div class="who">
+        <span v-for="s in seats" :key="s.playerId" class="who-seat here">{{ s.avatar }}</span>
+        <span v-for="n in missing" :key="'e' + n" class="who-seat empty" />
+      </div>
+
+      <div v-if="missing > 0" class="dots"><i /><i /><i /></div>
+
+      <!-- 第三个人可能永远不来。房主随时能说「就这些人」 -->
+      <button v-if="canStartNow" class="start-now pressable" @click="conn?.startNow()">
+        {{ $t('net.startNow') }}
+      </button>
     </div>
 
     <!-- 对局：游戏组件自己画。联机的事它不用管 -->
@@ -160,6 +184,39 @@ const awayFor = computed(() => seats.value.find((s) => !s.online) ?? null)
   line-height: 1;
   font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
 }
+/* 谁来了 / 还差谁 */
+.who {
+  display: flex;
+  gap: clamp(8px, 2vmin, 16px);
+}
+.who-seat {
+  display: grid;
+  place-items: center;
+  width: clamp(48px, 11vmin, 76px);
+  height: clamp(48px, 11vmin, 76px);
+  font-size: clamp(28px, 7vmin, 46px);
+  line-height: 1;
+  border-radius: 50%;
+  font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
+}
+.who-seat.here {
+  background: var(--bg-card);
+  box-shadow: var(--shadow);
+}
+/* 空位画虚线圈：还差几个一眼数得出来，不用认字 */
+.who-seat.empty {
+  border: 3px dashed rgba(61, 44, 30, 0.25);
+}
+.start-now {
+  padding: clamp(10px, 2vmin, 15px) clamp(18px, 4vmin, 30px);
+  font-size: clamp(14px, 2.2vmin, 19px);
+  font-weight: 700;
+  color: #fff;
+  background: var(--accent-2);
+  border-radius: 999px;
+  box-shadow: var(--shadow);
+}
+
 /* 掉线的遮罩：压暗但看得见牌桌，让她知道"游戏还在，只是在等" */
 .away {
   position: fixed;

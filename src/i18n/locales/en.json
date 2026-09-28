@@ -105,6 +105,9 @@
     "joinRoom": "Join a room",
     "tapThree": "Tap the three your friend says",
     "withFriend": "Play with a friend",
-    "backToRoom": "Back to your room"
+    "backToRoom": "Back to your room",
+    "startNow": "Let's start with these",
+    "vsComputer": "Play the computer",
+    "howMany": "How many players?"
   }
 }

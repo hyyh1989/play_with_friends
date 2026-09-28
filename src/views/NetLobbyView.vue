@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { CODE_ICONS, CODE_LEN, iconsToCode } from '../net/protocol'
 import { createRoomCode } from '../net/room-client'
 import { playSfx } from '../core/audio'
@@ -18,6 +18,9 @@ import { playSfx } from '../core/audio'
  * 所以这里按「大人 3 秒钟搞定」来设计，别为了让 5 岁独立完成而把它做复杂。
  */
 const router = useRouter()
+const route = useRoute()
+/** 上一层选的人数。加入别人的房间时用不上（房间已经定好几个人了） */
+const wantSize = computed(() => Number(route.query.n) || 2)
 const mode = ref<'pick' | 'join'>('pick')
 const picked = ref<number[]>([])
 const busy = ref(false)
@@ -31,7 +34,11 @@ async function openRoom() {
   err.value = ''
   playSfx('tap')
   try {
-    router.push({ name: 'netplay', params: { code: await createRoomCode() }, query: { g: 'uno' } })
+    router.push({
+      name: 'netplay',
+      params: { code: await createRoomCode() },
+      query: { g: 'uno', n: wantSize.value },
+    })
   } catch {
     // 开房要联网。失败了直说，别让她对着转圈等
     err.value = '连不上，检查一下网络'

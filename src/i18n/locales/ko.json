@@ -105,6 +105,9 @@
     "joinRoom": "방 들어가기",
     "tapThree": "친구가 말한 세 개를 눌러",
     "withFriend": "친구랑 놀기",
-    "backToRoom": "아까 그 방으로"
+    "backToRoom": "아까 그 방으로",
+    "startNow": "이 사람들로 시작",
+    "vsComputer": "컴퓨터랑 놀기",
+    "howMany": "몇 명이서 놀까?"
   }
 }
