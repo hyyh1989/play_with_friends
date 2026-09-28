@@ -100,6 +100,10 @@
   },
   "net": {
     "tellFriend": "친구에게 이 세 개를 알려 줘",
-    "waitAMoment": "잠깐만 기다려"
+    "waitAMoment": "잠깐만 기다려",
+    "openRoom": "방 만들기",
+    "joinRoom": "방 들어가기",
+    "tapThree": "친구가 말한 세 개를 눌러",
+    "withFriend": "친구랑 놀기"
   }
 }

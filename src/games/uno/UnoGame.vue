@@ -634,6 +634,21 @@ function goHome() {
         </span>
       </button>
     </div>
+
+    <!--
+      和朋友玩。放在人数选择下面而不是首页：她来这一屏就是要玩 UNO，
+      「和谁玩」是同一个决定的两半。
+      ⚠️ UNO 是四个游戏里唯一需要两台设备的（手牌要各自藏着），
+      所以只有它有这个入口。
+    -->
+    <button class="choice friend pressable" @click="router.push('/lobby')">
+      <span class="mode-avatars">
+        <span class="mode-avatar">{{ settings.avatar }}</span>
+        <span class="vs">VS</span>
+        <span class="mode-avatar">📱</span>
+      </span>
+      <span class="friend-t">{{ $t('net.withFriend') }}</span>
+    </button>
     <button class="go pressable" @click="start">▶</button>
   </div>
 
@@ -755,6 +770,19 @@ function goHome() {
 </template>
 
 <style scoped>
+/* 「和朋友玩」和上面的人数选项区分开：它去的是另一条路（两台设备），不是选人数 */
+.choice.friend {
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+  border-color: var(--accent-2);
+}
+.friend-t {
+  font-size: clamp(13px, 2vmin, 17px);
+  font-weight: 700;
+  color: var(--accent-2);
+}
+
 .setup {
   position: relative;
   display: flex;

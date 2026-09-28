@@ -100,6 +100,10 @@
   },
   "net": {
     "tellFriend": "把这三个告诉小伙伴",
-    "waitAMoment": "等一下哦"
+    "waitAMoment": "等一下哦",
+    "openRoom": "开个房间",
+    "joinRoom": "加入房间",
+    "tapThree": "照着小伙伴说的，点三下",
+    "withFriend": "和朋友玩"
   }
 }
