@@ -108,6 +108,8 @@
     "backToRoom": "아까 그 방으로",
     "startNow": "이 사람들로 시작",
     "vsComputer": "컴퓨터랑 놀기",
-    "howMany": "몇 명이서 놀까?"
+    "howMany": "몇 명이서 놀까?",
+    "stopWaiting": "그만 기다릴래",
+    "roomFull": "이 판은 벌써 시작했어"
   }
 }

@@ -108,6 +108,8 @@
     "backToRoom": "Back to your room",
     "startNow": "Let's start with these",
     "vsComputer": "Play the computer",
-    "howMany": "How many players?"
+    "howMany": "How many players?",
+    "stopWaiting": "Don't wait",
+    "roomFull": "This game already started"
   }
 }

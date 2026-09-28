@@ -110,13 +110,75 @@ function leave() {
   router.push('/')
 }
 
+/**
+ * 「不等了」。和上面的 `leave` 只差一件事：**保留「回到刚才的房间」的入口。**
+ *
+ * 因为这两件事根本不一样：`leave` 是「我不玩了」，而这个是**「我不等了」** ——
+ * 这一局还没打完，服务端也还留着（KEEP_ALIVE_MS）。对方十分钟后回来，
+ * 两个人从首页那条入口进去就能接着打原来那手牌，不用重新发。
+ * （打完一局之后的「回首页」走的是 `leave`，那个必须清掉 ——
+ *   回去只会看到一局已经结束的牌，那条入口就是骗人的。）
+ *
+ * 顺手把时间戳刷新成"现在"：服务端那个 30 分钟的清理闹钟是从**最后一个人断开**
+ * 开始算的，而入口的有效期原本从**进房间**那一刻算。一局打久了就会出现
+ * 「房间还在、入口已经过期」。重新盖个章，两边的 30 分钟就对齐了。
+ */
+function stopWaiting() {
+  rememberRoom(code.value, gameId.value)
+  router.push('/')
+}
+
 /** 掉线的是谁（用来显示"等一下哦"时把他的头像变灰） */
 const awayFor = computed(() => seats.value.find((s) => !s.online) ?? null)
 
-/** 我是不是房主（第一个进门的那个）。**只有房主能决定什么时候开始** */
-const isHost = computed(() => youIndex.value === 0)
-/** 够两个人了，房主就能开。坐满 4 个的话服务端会自动开，不用按 */
-const canStartNow = computed(() => isHost.value && seats.value.length >= 2)
+/**
+ * 我是不是房主。**房主 = 第一个还在线的人**，不是写死的 0 号座位。
+ *
+ * 写死的话，房主在等人页走掉就成了死局 —— 等人页不会转 paused，
+ * 所以下面那个「不等了」也救不了，剩下的人只能看着三个点永远按不了开始。
+ * 房主回来了位置自动让回去；这个身份只用来决定谁能按 ▶，换来换去没副作用。
+ */
+const isHost = computed(() => {
+  const i = seats.value.findIndex((s) => s.online)
+  return i >= 0 && i === youIndex.value
+})
+/** 在线的有几个。坐满 4 个的话服务端会自动开，不用按 ▶ */
+const onlineCount = computed(() => seats.value.filter((s) => s.online).length)
+/** 够两个**在线**的人，房主就能开 */
+const canStartNow = computed(() => isHost.value && onlineCount.value >= 2)
+
+/** 房间满了（多半是「这局已经开始了」——服务端把掉线的人留在了桌外） */
+const roomFull = computed(() => conn.value?.lastError.value === 'full')
+
+/* ── 等太久了：给一个出口 ──────────────────────────────
+ * 15 秒不是拍脑袋：**能自动恢复的情况全都在 5 秒内完成** ——
+ * 切出去再回来是 visibilitychange 立刻重连，wifi 抖一下的退避上限是 5 秒。
+ * 再往后等只剩「她走开了」这一类，那是几分钟到几十分钟，多长的超时都救不了。
+ * 所以 15 秒已经把可恢复的情况甩开三倍，等到 30 秒只是让孩子多盯半分钟空屏幕。
+ *
+ * ⚠️ 按钮只是**出现**，不会自动离开 —— 对方真回来了，遮罩连着它一起消失。
+ * 所以早出现的代价很小，晚出现的代价是实打实的干等。
+ */
+const WAIT_LIMIT_MS = 15_000
+const waitedTooLong = ref(false)
+let waitTimer: number | null = null
+watch(
+  phase,
+  (p) => {
+    if (waitTimer !== null) clearTimeout(waitTimer)
+    waitTimer = null
+    waitedTooLong.value = false
+    if (p !== 'paused') return
+    waitTimer = window.setTimeout(() => {
+      waitTimer = null
+      waitedTooLong.value = true
+    }, WAIT_LIMIT_MS)
+  },
+  { immediate: true },
+)
+onUnmounted(() => {
+  if (waitTimer !== null) clearTimeout(waitTimer)
+})
 </script>
 
 <template>
@@ -124,23 +186,40 @@ const canStartNow = computed(() => isHost.value && seats.value.length >= 2)
     <!-- 等人：房间号要大，这是要念给对方听的（"小熊、火箭、星星"） -->
     <div v-if="phase === 'waiting'" class="wait safe-area">
       <button class="corner-back pressable" :aria-label="$t('common.back')" @click="leave">←</button>
-      <p class="wait-t">{{ $t('net.tellFriend') }}</p>
-      <div class="code">
-        <span v-for="(ic, i) in codeToIcons(code)" :key="i" class="code-ic">{{ ic }}</span>
-      </div>
 
       <!--
-        已经来了谁。**不画空位** —— 4 是上限不是期待，画出来会让人以为
-        非得等够 4 个。谁来谁坐，房主说开始。
+        进不去了（多半是这局已经开始）。不报错、不讲原因，
+        只说一句能懂的话 —— 左上角的 ← 就是出口。
       -->
-      <div class="who">
-        <span v-for="s in seats" :key="s.playerId" class="who-seat here">{{ s.avatar }}</span>
-      </div>
+      <template v-if="roomFull">
+        <p class="wait-t">{{ $t('net.roomFull') }}</p>
+      </template>
+      <template v-else>
+        <p class="wait-t">{{ $t('net.tellFriend') }}</p>
+        <div class="code">
+          <span v-for="(ic, i) in codeToIcons(code)" :key="i" class="code-ic">{{ ic }}</span>
+        </div>
 
-      <!-- 房主：够两个人就能开。用和选人页同一个 ▶，不用认字 -->
+        <!--
+          已经来了谁。**不画空位** —— 4 是上限不是期待，画出来会让人以为
+          非得等够 4 个。谁来谁坐，房主说开始。
+          掉线的变灰：▶ 只带在线的人上桌，不显示出来的话那个按钮就是骗人的。
+        -->
+        <div class="who">
+          <span
+            v-for="s in seats"
+            :key="s.playerId"
+            class="who-seat"
+            :class="s.online ? 'here' : 'gone'"
+            >{{ s.avatar }}</span
+          >
+        </div>
+      </template>
+
+      <!-- 房主：够两个在线的人就能开。用和选人页同一个 ▶，不用认字 -->
       <button v-if="canStartNow" class="go pressable" @click="conn?.startNow()">▶</button>
       <!-- 客人：等房主 -->
-      <div v-else class="dots"><i /><i /><i /></div>
+      <div v-else-if="!roomFull" class="dots"><i /><i /><i /></div>
     </div>
 
     <!-- 对局：游戏组件自己画。联机的事它不用管 -->
@@ -151,6 +230,15 @@ const canStartNow = computed(() => isHost.value && seats.value.length >= 2)
       <span class="away-face">{{ awayFor?.avatar ?? '🙂' }}</span>
       <p>{{ $t('net.waitAMoment') }}</p>
       <div class="dots"><i /><i /><i /></div>
+      <!--
+        等够 15 秒才出现的出口。在这之前故意什么都没有 ——
+        对方多半几秒内就回来了，这时候摆个「不等了」只会诱着她按掉一局好好的游戏。
+        走的是 `stopWaiting` 不是 `leave`：局面在服务端留着，
+        首页的「回到刚才的房间」要保住，对方回来了还能接着打。
+      -->
+      <button v-if="waitedTooLong" class="quit pressable" @click="stopWaiting">
+        {{ $t('net.stopWaiting') }}
+      </button>
     </div>
   </div>
 </template>
@@ -201,6 +289,20 @@ const canStartNow = computed(() => isHost.value && seats.value.length >= 2)
   box-shadow: var(--shadow);
 }
 /* 掉线的遮罩：压暗但看得见牌桌，让她知道"游戏还在，只是在等" */
+.who-seat.gone {
+  opacity: 0.35;
+  filter: grayscale(1);
+}
+.quit {
+  margin-top: 8px;
+  padding: 12px 28px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--ink);
+  font-size: 20px;
+  font-weight: 700;
+}
 .away {
   position: fixed;
   inset: 0;

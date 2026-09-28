@@ -231,10 +231,27 @@ export class Room implements DurableObject {
     const room = await this.read()
     if (!room || room.phase !== 'waiting') return
     const me = tagOf(ws)?.playerId
-    // 只有房主（第一个进门的人）能按，而且至少得有两个人
-    if (!me || room.seats[0]?.playerId !== me || room.seats.length < 2) return
+    if (!me) return
 
-    room.size = room.seats.length // 就按现在这些人开
+    /*
+     * 房主 = **第一个还在线的人**，不是写死的 0 号座位。
+     *
+     * 写死的话，房主在等人页走掉就成了死局：等人页不会转 paused（`onGone`
+     * 只在 playing 时转），所以「等一下哦」那层连同它的「不等了」都不会出现，
+     * 剩下的人只能看着三个跳点，**永远按不了开始**，只能退出去重开一个房间。
+     * 房主回来了位置自动让回去 —— 这个身份只用来决定谁能按 ▶，换来换去没副作用。
+     */
+    const online = room.seats.filter((s) => s.online)
+    if (online[0]?.playerId !== me || online.length < 2) return
+
+    /*
+     * 「就这些人，开始吧」按字面执行：**只带此刻在线的人上桌**。
+     * 把掉着线的也带进去的话，一开局就卡在他的回合，而这时 phase 是 playing
+     * 不是 paused —— 连那层遮罩都不会出现，纯粹的死局、没有任何出口。
+     * 被留下的人再连回来会收到 'full'（等人页会告诉他"这局已经开啦"）。
+     */
+    room.seats = online
+    room.size = room.seats.length
     room.state = this.newGame(room)
     room.phase = 'playing'
     await this.write(room)

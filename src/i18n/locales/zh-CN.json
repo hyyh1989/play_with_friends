@@ -108,6 +108,8 @@
     "backToRoom": "回到刚才的房间",
     "startNow": "就这些人，开始吧",
     "vsComputer": "和电脑玩",
-    "howMany": "几个人玩？"
+    "howMany": "几个人玩？",
+    "stopWaiting": "不等了",
+    "roomFull": "这局已经开始啦"
   }
 }
