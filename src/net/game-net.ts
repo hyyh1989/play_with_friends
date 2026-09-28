@@ -26,6 +26,12 @@ export interface GameNet {
   /** 把动作发给服务端。**不要在本地先应用** —— 等服务端广播回来 */
   act(action: unknown): void
   rematch(): void
+  /**
+   * 我主动离开这个房间（不是掉线）。
+   * 会把「刚才在哪个房间」的记录清掉 —— 主动走 = 不打算回去了，
+   * 首页就不该再给「回到刚才的房间」的入口。
+   */
+  leave(): void
 }
 
 export const GAME_NET: InjectionKey<GameNet | null> = Symbol('game-net')

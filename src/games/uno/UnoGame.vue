@@ -94,7 +94,6 @@ const playerCount = ref(2)
  * 理顺之后两边的第二层长得一样、含义也一样，孩子学一次就会。
  */
 const setupStep = ref<'who' | 'count'>('who')
-const vsWho = ref<'ai' | 'friend'>('ai')
 /*
  * ── 联机 ──
  * 注得到 net = 正在和别人联机：**状态由服务端说了算**，这里只显示；
@@ -258,16 +257,6 @@ function dimmed(card: Card): boolean {
 
 function handCount(playerId: string): number {
   return state.value?.hands[playerId]?.length ?? 0
-}
-
-/** 第二层的 ▶：和电脑玩就直接开局，和朋友玩就去开房/加入 */
-function onGo() {
-  if (vsWho.value === 'friend') {
-    playSfx('tap')
-    router.push({ name: 'lobby', query: { n: playerCount.value } })
-    return
-  }
-  start()
 }
 
 function start() {
@@ -629,6 +618,10 @@ watch(
 )
 
 function goHome() {
+  /* 从对局页主动回首页 = 不打算回去了（打完了换个游戏，或者中途不想玩了）。
+     不清掉的话，首页会一直挂着「回到刚才的房间」，点进去看到的是上一局
+     已经结束的牌面 —— 用户实测觉得像 bug（2026-09-28）。 */
+  net?.leave()
   router.push('/')
 }
 </script>
@@ -684,15 +677,16 @@ function goHome() {
       <div class="two-who">
         <button
           class="who-card pressable"
-          @click="((vsWho = 'ai'), (setupStep = 'count'), playSfx('tap'))"
+          @click="((setupStep = 'count'), playSfx('tap'))"
         >
           <span class="who-art">{{ settings.avatar }}<i class="vs">VS</i>🤖</span>
           <span class="who-t">{{ $t('net.vsComputer') }}</span>
         </button>
-        <button
-          class="who-card pressable"
-          @click="((vsWho = 'friend'), (setupStep = 'count'), playSfx('tap'))"
-        >
+        <!--
+          和朋友玩【不经过人数那一层】：人数对真人没有意义 ——
+          建房的人选了也不作数，加入的人选了更不作数。谁来谁坐，房主说开始。
+        -->
+        <button class="who-card pressable" @click="(playSfx('tap'), router.push('/lobby'))">
           <span class="who-art">{{ settings.avatar }}<i class="vs">VS</i>📱</span>
           <span class="who-t">{{ $t('net.withFriend') }}</span>
         </button>
@@ -714,14 +708,12 @@ function goHome() {
           <span class="mode-avatars">
             <template v-for="n in count" :key="n">
               <span v-if="n === 2" class="vs">VS</span>
-              <span class="mode-avatar">{{
-                n === 1 ? settings.avatar : vsWho === 'ai' ? AI_AVATARS[n - 2] : '📱'
-              }}</span>
+              <span class="mode-avatar">{{ n === 1 ? settings.avatar : AI_AVATARS[n - 2] }}</span>
             </template>
           </span>
         </button>
       </div>
-      <button class="go pressable" @click="onGo">▶</button>
+      <button class="go pressable" @click="start">▶</button>
     </template>
   </div>
 

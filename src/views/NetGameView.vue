@@ -55,6 +55,7 @@ const net: GameNet = {
   connected,
   act: (a) => conn.value?.act(a),
   rematch: () => conn.value?.rematch(),
+  leave: forgetRoom,
 }
 provide(GAME_NET, net)
 
@@ -112,14 +113,10 @@ function leave() {
 /** 掉线的是谁（用来显示"等一下哦"时把他的头像变灰） */
 const awayFor = computed(() => seats.value.find((s) => !s.online) ?? null)
 
-/** 这个房间打算几个人 */
-const size = computed(() => conn.value?.room.value?.size ?? 2)
-/** 还差几个人 */
-const missing = computed(() => Math.max(0, size.value - seats.value.length))
-/** 我是不是房主（第一个进门的那个）。只有房主能提前开局 */
+/** 我是不是房主（第一个进门的那个）。**只有房主能决定什么时候开始** */
 const isHost = computed(() => youIndex.value === 0)
-/** 人没齐但已经够两个人了，房主可以先开 */
-const canStartNow = computed(() => isHost.value && seats.value.length >= 2 && missing.value > 0)
+/** 够两个人了，房主就能开。坐满 4 个的话服务端会自动开，不用按 */
+const canStartNow = computed(() => isHost.value && seats.value.length >= 2)
 </script>
 
 <template>
@@ -132,18 +129,18 @@ const canStartNow = computed(() => isHost.value && seats.value.length >= 2 && mi
         <span v-for="(ic, i) in codeToIcons(code)" :key="i" class="code-ic">{{ ic }}</span>
       </div>
 
-      <!-- 已经来了谁 + 还差几个。空位画成虚线圈，不认字也数得出来 -->
+      <!--
+        已经来了谁。**不画空位** —— 4 是上限不是期待，画出来会让人以为
+        非得等够 4 个。谁来谁坐，房主说开始。
+      -->
       <div class="who">
         <span v-for="s in seats" :key="s.playerId" class="who-seat here">{{ s.avatar }}</span>
-        <span v-for="n in missing" :key="'e' + n" class="who-seat empty" />
       </div>
 
-      <div v-if="missing > 0" class="dots"><i /><i /><i /></div>
-
-      <!-- 第三个人可能永远不来。房主随时能说「就这些人」 -->
-      <button v-if="canStartNow" class="start-now pressable" @click="conn?.startNow()">
-        {{ $t('net.startNow') }}
-      </button>
+      <!-- 房主：够两个人就能开。用和选人页同一个 ▶，不用认字 -->
+      <button v-if="canStartNow" class="go pressable" @click="conn?.startNow()">▶</button>
+      <!-- 客人：等房主 -->
+      <div v-else class="dots"><i /><i /><i /></div>
     </div>
 
     <!-- 对局：游戏组件自己画。联机的事它不用管 -->
@@ -203,20 +200,6 @@ const canStartNow = computed(() => isHost.value && seats.value.length >= 2 && mi
   background: var(--bg-card);
   box-shadow: var(--shadow);
 }
-/* 空位画虚线圈：还差几个一眼数得出来，不用认字 */
-.who-seat.empty {
-  border: 3px dashed rgba(61, 44, 30, 0.25);
-}
-.start-now {
-  padding: clamp(10px, 2vmin, 15px) clamp(18px, 4vmin, 30px);
-  font-size: clamp(14px, 2.2vmin, 19px);
-  font-weight: 700;
-  color: #fff;
-  background: var(--accent-2);
-  border-radius: 999px;
-  box-shadow: var(--shadow);
-}
-
 /* 掉线的遮罩：压暗但看得见牌桌，让她知道"游戏还在，只是在等" */
 .away {
   position: fixed;
