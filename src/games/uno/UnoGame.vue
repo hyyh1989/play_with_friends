@@ -675,13 +675,14 @@ function goHome() {
       ⚠️ UNO 是四个游戏里唯一需要两台设备的（手牌要各自藏着），
       所以只有它有这个入口。
     -->
-    <button class="choice friend pressable" @click="router.push('/lobby')">
+    <button class="friend-go pressable" @click="router.push('/lobby')">
       <span class="mode-avatars">
         <span class="mode-avatar">{{ settings.avatar }}</span>
         <span class="vs">VS</span>
         <span class="mode-avatar">📱</span>
       </span>
       <span class="friend-t">{{ $t('net.withFriend') }}</span>
+      <span class="friend-arrow">→</span>
     </button>
     <button class="go pressable" @click="start">▶</button>
   </div>
@@ -805,16 +806,37 @@ function goHome() {
 
 <style scoped>
 /* 「和朋友玩」和上面的人数选项区分开：它去的是另一条路（两台设备），不是选人数 */
-.choice.friend {
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 4px;
-  border-color: var(--accent-2);
+/*
+ * ⚠️ 这个按钮**不是**上面那组单选项的一员：点它是**去另一个页面**，
+ * 不是「选中它、然后按 ▶」。所以它绝不能长得像 `.choice`。
+ *
+ * 实测中招（2026-09-28 用户报）：我原来给它套了 `.choice` 再加
+ * `border-color: var(--accent-2)` 当装饰 —— 而那**正好就是 `.choice.active`
+ * （已选中）的样子**。用户以为默认已经选了"和朋友玩"，直接按 ▶，
+ * 结果开的是和电脑玩。
+ *
+ * 现在改成**实心胶囊 + 箭头**：和"白卡片 + 绿边框"这套选中语言彻底分开，
+ * 一眼看出它是"去某个地方"，不是"选哪一个"。
+ */
+.friend-go {
+  display: flex;
+  align-items: center;
+  gap: clamp(8px, 1.6vmin, 14px);
+  margin-top: clamp(4px, 1.5vmin, 14px);
+  padding: clamp(10px, 2vmin, 16px) clamp(16px, 3vmin, 26px);
+  color: #fff;
+  background: var(--accent-2);
+  border-radius: 999px;
+  box-shadow: var(--shadow);
 }
 .friend-t {
   font-size: clamp(13px, 2vmin, 17px);
   font-weight: 700;
-  color: var(--accent-2);
+}
+.friend-arrow {
+  font-size: clamp(15px, 2.2vmin, 20px);
+  font-weight: 800;
+  opacity: 0.85;
 }
 
 .setup {
