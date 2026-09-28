@@ -74,6 +74,20 @@ export function connectRoom(opts: ConnectOptions): RoomConnection {
 
   function open() {
     if (closed) return
+    /*
+     * ⚠️ 已经有一条在路上（CONNECTING）或已连上（OPEN）就别再开第二条。
+     *
+     * 不拦的话会这样（2026-09-28 用户 iPad 实测）：页面刚加载开了 A，
+     * 紧接着 visibilitychange 触发 —— 此时 A 还在 CONNECTING，`connected`
+     * 仍是 false，于是又开了 B，**A 被丢掉引用但还活着**。
+     * A、B 用同一个身份先后 join，服务端把先到的那条当"旧的"踢掉；
+     * 万一被踢的是 B（ws 指向的那条），它收到 'replaced' 就再也不重连了。
+     * 结果：界面还显示着断开前的最后一份快照，**看起来完全正常、回合也对，
+     * 但每一次点击都发进一条死连接** —— 点出牌、点摸牌全没反应。
+     */
+    if (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN)) {
+      return
+    }
     clearTimer()
     try {
       ws = new WebSocket(url())
@@ -151,11 +165,28 @@ export function connectRoom(opts: ConnectOptions): RoomConnection {
    */
   function onVisible() {
     if (document.hidden || closed) return
-    if (!connected.value) {
-      retry = 0
-      clearTimer()
-      open()
+    if (connected.value) return
+    /*
+     * 回到前台、但还没连上 —— 手里那条多半是**僵尸**：iOS 把 app 挂起之后，
+     * WebSocket 实际已经死了，readyState 却可能还显示 OPEN/CONNECTING。
+     * 不主动掐掉的话，上面 open() 里那道「已有连接就别再开」的保护
+     * 会把重连**永远**挡在门外 —— 症状和这次的 bug 一模一样：
+     * 界面显示着旧快照、看起来正常，点什么都没反应。
+     * 先摘掉 onclose 再关，免得这次主动关闭又触发一轮退避/'replaced' 判断。
+     */
+    if (ws) {
+      try {
+        ws.onclose = null
+        ws.onmessage = null
+        ws.close()
+      } catch {
+        /* 本来就死了 */
+      }
+      ws = null
     }
+    retry = 0
+    clearTimer()
+    open()
   }
   document.addEventListener('visibilitychange', onVisible)
 
