@@ -17,10 +17,6 @@ import * as uno from '../src/games/uno/rules'
 
 /**
  * 服务端需要的最小接口 —— `GameModule` 去掉 meta / AI / 组件之后剩下的部分。
- *
- * 将来要防作弊时，这里多一个 `redactFor(state, playerId)`，每个游戏各实现一个，
- * 网络层不用动。现在先不做：面对面玩，对手是爸爸，作弊要开发者工具。
- * **但公开发布前必须补上。**
  */
 export interface GameRules<S = unknown, A = unknown> {
   createInitialState(config: GameConfig): S
@@ -29,6 +25,16 @@ export interface GameRules<S = unknown, A = unknown> {
   currentPlayer(state: S): string | null
   isFinished(state: S): boolean
   getWinner(state: S): string | null
+  /**
+   * 发给某一个玩家的那一份局面 —— **把他不该看见的东西去掉**（2026-09-29 补的）。
+   *
+   * 没有隐藏信息的游戏不用实现（四子棋、找相同都是明的，棋盘和图案人人看得见）。
+   * 实现了的话 `broadcast()` 就会按收件人各裁一份，而不是所有人收到同一坨。
+   *
+   * ⚠️ **翻牌配对以后要联机的话必须补上** —— `cards[].symbol` 是整个牌面布局，
+   * 而"记住牌在哪"就是那个游戏本身，能读到 state 等于过目不忘，比 UNO 还该管。
+   */
+  redactFor?(state: S, playerId: string): S
 }
 
 export const SERVER_GAMES: Record<string, GameRules<any, any>> = {

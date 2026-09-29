@@ -16,6 +16,8 @@ import {
   createInitialState,
   currentPlayer,
   getWinner,
+  handSize,
+  handSizes,
   isFinished,
   topCard,
   type Card,
@@ -255,8 +257,9 @@ function dimmed(card: Card): boolean {
   return settings.assistHighlight && myTurn.value && !playable(card)
 }
 
+/* ⚠️ 走 handSize，别读 hands —— 联机时收到的是裁剪版，别人的手牌不在里面 */
 function handCount(playerId: string): number {
-  return state.value?.hands[playerId]?.length ?? 0
+  return state.value ? handSize(state.value, playerId) : 0
 }
 
 function start() {
@@ -536,7 +539,7 @@ function eventKey(s: UnoState): string {
   const card = e.type === 'play' ? e.card.id : ''
   /* 光靠弃牌堆张数不够：摸牌不改弃牌堆。再带上所有人手牌总数 ——
      出牌 -1、摸牌 +n，两者合起来对每一次真实操作都是唯一的。 */
-  const inHands = Object.values(s.hands).reduce((n, h) => n + h.length, 0)
+  const inHands = Object.values(handSizes(s)).reduce((n, c) => n + c, 0)
   return `${e.type}:${e.playerId}:${card}:${s.discardPile.length}:${inHands}`
 }
 

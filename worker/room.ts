@@ -322,9 +322,24 @@ export class Room implements DurableObject {
   }
 
   /** 每个人收到的快照不一样（youIndex 不同），所以逐个发，不能广播同一个 blob */
+  /**
+   * 把最新局面推给房间里每个人。
+   *
+   * ⚠️ **每个人收到的不是同一份。** 本来就是逐个连接发的（`youIndex` 因人而异），
+   * 2026-09-29 起再加一层：游戏实现了 `redactFor` 的话，**按收件人把局面裁一遍**，
+   * 去掉他不该看见的东西（UNO 就是别人的手牌、摸牌堆和 rng）。
+   * 不裁的话，打开开发者工具看一眼 WebSocket 就等于开了上帝视角。
+   */
   private broadcast(room: RoomData) {
+    const rules = rulesFor(room.gameId)
+    /* 还没报身份的连接（accept 了但 join 还没到）**一个字都不给** ——
+       否则它正好拿到一份完整的、谁都能看的局面。 */
+    const viewFor = (me: string | null): unknown => {
+      if (!rules?.redactFor || room.state === null) return room.state
+      return me ? rules.redactFor(room.state, me) : null
+    }
     for (const ws of this.ctx.getWebSockets()) {
-      const me = tagOf(ws)?.playerId
+      const me = tagOf(ws)?.playerId ?? null
       const youIndex = room.seats.findIndex((s) => s.playerId === me)
       const snap: RoomSnapshot = {
         code: room.code,
@@ -337,7 +352,7 @@ export class Room implements DurableObject {
           online: s.online,
         })),
         youIndex,
-        state: room.state,
+        state: viewFor(me),
         rematch: room.rematch,
       }
       send(ws, { t: 'room', room: snap })

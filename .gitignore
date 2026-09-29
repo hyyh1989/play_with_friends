@@ -27,4 +27,3 @@ unpackage/
 .env*
 !.env.example
 
-dist-pages

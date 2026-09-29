@@ -37,7 +37,6 @@ npm run typecheck   # 只做类型检查
 | **https://play-with-friends.pages.dev** | `npm run deploy:cf-pages` | ✅ | **日常就用这个**，大陆也能直连 |
 | https://play.xiaotangyuan.workers.dev | `npm run deploy` | ✅ | 开发/备用。**大陆打不开** |
 | ⬆️ 两个一起发 | **`npm run deploy:all`** | | **平时用这条** |
-| https://hyyh1989.github.io/play_with_friends/ | 推 main 自动发 | ❌ | 老的应急镜像，pages.dev 站稳后可以退役 |
 
 **为什么是这个格局**：`workers.dev` 这个域名在某些网络下被**整域名屏蔽**（常被拿来搭
 反向代理），中国大陆的朋友打不开；而 `*.pages.dev` 能直连（2026-09-28 实测，
@@ -45,8 +44,13 @@ npm run typecheck   # 只做类型检查
 （2026-09-28 用户更正：以前这里错记成"韩国朋友"，韩国那位其实人在马来西亚，
 和用户一样能直接打开。真正受影响的只有大陆那位。）
 
-⚠️ **GitHub 镜像给不了联机** —— 纯静态托管，没有后端，`/api/*` 不存在，只能单机玩。
-这也是它当初唯一的作用；pages.dev **既能打开又能联机**，所以它已经没有用户了。
+**GitHub Pages 那个镜像 2026-09-29 退役了**（工作流 `.github/workflows/pages.yml`、
+`build:pages` 脚本一起删掉的）。它当初唯一的作用就是"大陆那位朋友能打开"，
+但它**给不了联机** —— 纯静态托管，没有后端，`/api/*` 不存在，只能单机玩。
+pages.dev 实测大陆能直连、又能联机，所以镜像一个用户都没有了。
+连带作废的一条老规矩：镜像挂在 `/play_with_friends/` 子路径下，所以资源路径
+不能写死成 `/xxx`、要用 `import.meta.env.BASE_URL`（音频踩过）。
+现在两个部署都在根路径，这条不再是硬约束 —— 但代码里已经这么写了，别去改回来。
 
 ### 两个 Cloudflare 部署是怎么共存的（2026-09-28）
 
@@ -102,9 +106,6 @@ worker/env.ts      ← 绑定类型。单独一个文件，好让 app.ts 不必 
 ⚠️ **localStorage 按域名隔离。** 换域名 = 头像、UNO 等级、教学进度、身份（playerId）
 全部重来，iPad 上的快捷方式也要**删掉重加**。这不是 bug，是 Web 的规矩。
 所以「换个主力域名」这件事有一次性成本，别反复换。
-
-镜像挂在 `/play_with_friends/` 子路径下，所以**任何资源路径都不能写死成 `/xxx`**，
-要用 `import.meta.env.BASE_URL` 前缀（音频就踩过这个坑）。
 
 账号子域名是 `xiaotangyuan`，以后每个应用都是
 `<应用名>.xiaotangyuan.workers.dev`；本应用线上名叫 `play`（见 wrangler.jsonc），

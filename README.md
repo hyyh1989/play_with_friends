@@ -10,8 +10,6 @@ A small collection of board and card games for 5-6 year olds, played on an iPad.
 block `workers.dev` wholesale (it is commonly used for reverse proxies), so the `pages.dev`
 link is the one to share. **Players on either domain can join the same room.**
 
-<sub>There is also an older static mirror at https://hyyh1989.github.io/play_with_friends/
-— single-player only, no multiplayer (GitHub Pages has no backend).</sub>
 
 ---
 

@@ -53,6 +53,20 @@ export interface UnoState {
   /** 1 = 顺时针，-1 = 逆时针（反转牌会改这个） */
   direction: 1 | -1
   rng: RngState
+  /**
+   * **裁剪过的局面才有这个字段**：每个人手上几张牌。
+   *
+   * 完整局面里没有它（张数从 `hands` 现算）。所以**一律用 `handSize()` 读张数，
+   * 别直接 `hands[谁].length`** —— 裁剪版里别人的手牌根本不在。
+   */
+  handCounts?: Record<string, number>
+  /**
+   * 这一份是发给某一个玩家看的**裁剪版**，缺了别人的手牌、摸牌堆和 rng。
+   * ⚠️ **只能拿来显示，绝不能喂回 `applyAction`。**
+   * 联机时客户端本来就不跑规则引擎（只发动作、由服务端算），所以不会踩到；
+   * 留这个标记是为了在开发者工具里一眼看出手上是哪一份。
+   */
+  redacted?: true
   /** 上一步发生了什么，界面用来播动画和音效 */
   lastEvent:
     | { type: 'play'; playerId: string; card: Card }
@@ -132,13 +146,57 @@ export function topCard(state: UnoState): Card {
   return state.discardPile[state.discardPile.length - 1]
 }
 
+/**
+ * 某个人手上几张牌。
+ *
+ * ⚠️ **判张数一律走这里，不要直接读 `hands[谁].length`。**
+ * 联机时每个人收到的是**裁剪版**：只有自己的手牌，别人的只剩一个数字
+ * （`handCounts`）。直接读 `hands` 的话，别人的那一项是 `undefined` ——
+ * 而 `undefined?.length === 0` 是 `false`，**不会报错，只会静静地算错**。
+ * `isFinished` 当初就是这么写的：对手打完最后一张牌，你这边永远不结算。
+ */
+export function handSize(state: UnoState, playerId: string): number {
+  return state.handCounts?.[playerId] ?? state.hands[playerId]?.length ?? 0
+}
+
+/** 所有人各几张。界面算"这一步是不是新的"要用到总数 */
+export function handSizes(state: UnoState): Record<string, number> {
+  const out: Record<string, number> = {}
+  for (const p of state.players) out[p.id] = handSize(state, p.id)
+  return out
+}
+
 export function isFinished(state: UnoState): boolean {
-  return Object.values(state.hands).some((hand) => hand.length === 0)
+  return state.players.some((p) => handSize(state, p.id) === 0)
 }
 
 export function getWinner(state: UnoState): string | null {
-  const winner = state.players.find((p) => state.hands[p.id]?.length === 0)
+  const winner = state.players.find((p) => handSize(state, p.id) === 0)
   return winner?.id ?? null
+}
+
+/**
+ * 发给 `playerId` 的那一份局面：**把他不该看见的东西去掉**。
+ *
+ * 不做的话，打开开发者工具看一眼 WebSocket 就能拿到：
+ *   - `hands` —— 所有人的手牌，每张牌的颜色数字
+ *   - `drawPile` —— **整个摸牌堆的顺序，等于这一局剩下的全部未来**
+ *   - `rng` —— 种子状态，能推算后面的洗牌
+ * 第二条才是真正严重的：不只是偷看对手，是接下来每张牌是什么都已经写好了。
+ *
+ * 留下的都是本来就该公开的：弃牌堆、当前颜色、轮到谁、方向、各人还剩几张。
+ * ⚠️ 结果**只能显示，不能喂回规则引擎**（见 `UnoState.redacted`）。
+ */
+export function redactFor(state: UnoState, playerId: string): UnoState {
+  return {
+    ...state,
+    // 只留自己的牌。**不是留一个空数组** —— 那样 handSize 会安静地算出 0
+    hands: { [playerId]: state.hands[playerId] ?? [] },
+    handCounts: handSizes(state),
+    drawPile: [],
+    rng: 0,
+    redacted: true,
+  }
 }
 
 /** 这张牌现在能不能出 */
